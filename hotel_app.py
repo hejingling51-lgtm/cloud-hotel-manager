@@ -34,13 +34,14 @@ st.markdown("""
     background-size: 100% 200%;
     animation: oceanFlow 8s ease-in-out infinite;
     color: #01579b;
-    padding: 17px 40px 27px;
+    padding: 20px 40px 40px;
     border-radius: 0;
     border: none;
     text-align: center;
     margin-bottom: 24px;
     overflow: hidden;
     box-shadow: none;
+    min-height: 80px;
 }
 
 @keyframes oceanFlow {
@@ -90,14 +91,6 @@ st.markdown("""
 @keyframes duckFloat {
     0%, 100% { transform: translateY(0)    rotate(-4deg); }
     50%      { transform: translateY(-6px) rotate(4deg);  }
-}
-
-.hero h1 {
-    font-size: 0.8rem;
-    font-weight: 800;
-    margin: 0;
-    position: relative;
-    z-index: 1;
 }
 
 /* ============ 一般產品卡片 ============ */
@@ -282,7 +275,6 @@ page = st.session_state.page
 if page == "🏠 首頁":
     st.markdown("""
     <div class="hero">
-      <h1>為消費者提供穩定、優質的產品供應</h1>
       <div class="ducks">
         <span>🦆</span><span>🦆</span><span>🦆</span>
       </div>
