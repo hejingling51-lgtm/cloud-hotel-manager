@@ -21,7 +21,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 #MainMenu, footer {visibility: hidden;}
-.main .block-container {padding-top: 1.5rem; max-width: 1200px;}
+.main .block-container {padding-top: 4rem; max-width: 1200px;}
 
 /* ============ Hero：無框 + 淡海洋 + 海水流動 ============ */
 .hero {
