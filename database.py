@@ -99,11 +99,11 @@ def seed_rooms():
         return
     for i in range(1, 25):
         if i <= 12:
-            rtype, rate, cap = "標準套房", 280.00, 2
+            rtype, rate, cap = "成人襪", 280.00, 2
         elif i <= 20:
-            rtype, rate, cap = "豪華套房", 480.00, 3
+            rtype, rate, cap = "兒童襪", 480.00, 3
         else:
-            rtype, rate, cap = "尊爵套房", 780.00, 4
+            rtype, rate, cap = "其它", 780.00, 4
         db.session.add(Room(
             room_no=f"R{i:03d}", room_type=rtype,
             nightly_rate=rate, capacity=cap, status="available",
@@ -138,20 +138,72 @@ def is_room_available(room_id, check_in, check_out, exclude_booking_id=None):
 
 
 def create_booking(room_id, guest_name, guest_email, guest_phone,
-                   check_in, check_out, note=""):
+                   check_in, check_out, note="",
+                   quantity=None, total_override=None):
+    """
+    建立訂單。
+
+    參數：
+      room_id        產品 / 房間 ID
+      guest_name     聯絡人姓名
+      guest_email    聯絡人 Email
+      guest_phone    聯絡人電話
+      check_in       下單日
+      check_out      交期（允許等於 check_in）
+      note           備註
+      quantity       數量（若提供，以此為準；否則以日期差計算）
+      total_override 自訂總金額（可選）。基於安全考量，
+                     不得低於「單價 × 數量」的 50%，否則忽略。
+
+    例外：
+      ValueError("room_not_found")    找不到產品
+      ValueError("invalid_dates")     交期早於下單日
+      ValueError("room_not_available") 該區間已有訂單佔用
+    """
     room = get_room(room_id)
     if not room:
         raise ValueError("room_not_found")
-    if check_out <= check_in:
+
+    # 允許同日下單（check_out == check_in）
+    if check_out < check_in:
         raise ValueError("invalid_dates")
+
+    # 決定數量
+    if quantity is None:
+        quantity = max(1, (check_out - check_in).days)
+    else:
+        try:
+            quantity = max(1, int(quantity))
+        except (TypeError, ValueError):
+            quantity = 1
+
+    # 檢查該區間是否已被佔用
     if not is_room_available(room_id, check_in, check_out):
         raise ValueError("room_not_available")
-    nights = (check_out - check_in).days
-    total = float(room.nightly_rate) * nights
+
+    # 以資料庫單價為基準計算金額
+    base_total = float(room.nightly_rate) * quantity
+
+    total = base_total
+    if total_override is not None:
+        try:
+            override = float(total_override)
+        except (TypeError, ValueError):
+            override = 0
+        # 安全檢查：不得低於原價 50%
+        if override > 0 and override >= base_total * 0.5:
+            total = override
+
     b = Booking(
-        room_id=room_id, guest_name=guest_name, guest_email=guest_email,
-        guest_phone=guest_phone, check_in=check_in, check_out=check_out,
-        nights=nights, total_amount=total, note=note,
+        room_id=room_id,
+        guest_name=guest_name,
+        guest_email=guest_email,
+        guest_phone=guest_phone,
+        check_in=check_in,
+        check_out=check_out,
+        nights=quantity,
+        total_amount=total,
+        note=note,
     )
     db.session.add(b)
     db.session.commit()

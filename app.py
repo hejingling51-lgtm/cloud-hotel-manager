@@ -110,7 +110,7 @@ def create_app():
         seed_rooms()
         VisitCounter.get_count()
 
-    # ---------------- 房间 ----------------
+    # ---------------- 房间 ---------------- 
     @app.route("/api/rooms", methods=["GET"])
     def api_list_rooms():
         return jsonify([r.to_dict() for r in list_rooms()])
@@ -126,7 +126,7 @@ def create_app():
             return jsonify({"ok": False, "error": "room_not_found"}), 404
         return jsonify({"ok": True, "room": room.to_dict()})
 
-    # ---------------- 预订 ----------------
+    # ---------------- 预订 ---------------- 
     @app.route("/api/bookings", methods=["GET"])
     def api_list_bookings():
         try:
@@ -138,25 +138,46 @@ def create_app():
     @app.route("/api/bookings", methods=["POST"])
     def api_create_booking():
         data = request.get_json(silent=True) or {}
+
+        # --- 解析下單日 ---
         try:
             check_in = datetime.strptime(data["check_in"], "%Y-%m-%d").date()
-            check_out = datetime.strptime(data["check_out"], "%Y-%m-%d").date()
         except (KeyError, ValueError):
-            return jsonify({"ok": False, "error": "invalid_dates"}), 400
+            return jsonify({"ok": False, "error": "invalid_check_in"}), 400
+
+        # --- 解析交期（若未提供，預設等於下單日）---
+        try:
+            check_out = datetime.strptime(
+                data.get("check_out") or data["check_in"], "%Y-%m-%d"
+            ).date()
+        except (KeyError, ValueError):
+            return jsonify({"ok": False, "error": "invalid_check_out"}), 400
+
+        # --- 可選：前端傳來的數量與總金額 ---
+        quantity = data.get("quantity")
+        total_amount = data.get("total_amount")
+
         try:
             b = create_booking(
                 room_id=int(data["room_id"]),
                 guest_name=(data.get("guest_name") or "").strip(),
                 guest_email=(data.get("guest_email") or "").strip(),
                 guest_phone=(data.get("guest_phone") or "").strip(),
-                check_in=check_in, check_out=check_out,
+                check_in=check_in,
+                check_out=check_out,
                 note=(data.get("note") or "").strip(),
+                quantity=int(quantity) if quantity is not None else None,
+                total_override=(
+                    float(total_amount)
+                    if total_amount is not None else None
+                ),
             )
         except ValueError as e:
             return jsonify({"ok": False, "error": str(e)}), 400
         except Exception:
             db.session.rollback()
             return jsonify({"ok": False, "error": "server_error"}), 500
+
         return jsonify({"ok": True, "booking": b.to_dict()}), 201
 
     @app.route("/api/bookings/<int:bid>/status", methods=["POST"])
@@ -166,6 +187,7 @@ def create_app():
             bid,
             booking_status=data.get("booking_status"),
             payment_status=data.get("payment_status"),
+            stripe_session_id=data.get("stripe_session_id"),
         )
         if not b:
             return jsonify({"ok": False, "error": "not_found"}), 404
@@ -181,7 +203,7 @@ def create_app():
             return jsonify({"ok": False, "error": "invalid_params"}), 400
         return jsonify({"available": is_room_available(room_id, ci, co)})
 
-    # ---------------- 绿界 ECPay ----------------
+    # ---------------- 绿界 ECPay ---------------- 
     @app.route("/api/ecpay/config", methods=["GET"])
     def api_ecpay_config():
         return jsonify({
@@ -313,7 +335,7 @@ def create_app():
             "trade_no": b.stripe_session_id or "",
         })
 
-    # ---------------- 访问计数 ----------------
+    # ---------------- 访问计数 ---------------- 
     @app.route("/api/visits", methods=["GET"])
     def api_get_visits():
         return jsonify({"count": VisitCounter.get_count()})
