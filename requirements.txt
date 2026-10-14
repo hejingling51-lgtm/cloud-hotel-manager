@@ -1,7 +1,7 @@
 Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
 Flask-Cors==4.0.1
-psycopg[binary]==3.2.3
+psycopg[binary]
 gunicorn==22.0.0
 streamlit==1.37.1
 requests==2.32.3
