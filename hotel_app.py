@@ -34,14 +34,14 @@ st.markdown("""
     background-size: 100% 200%;
     animation: oceanFlow 8s ease-in-out infinite;
     color: #01579b;
-    padding: 20px 40px 40px;
+    padding: 13px 40px 27px;
     border-radius: 0;
     border: none;
     text-align: center;
     margin-bottom: 24px;
     overflow: hidden;
     box-shadow: none;
-    min-height: 80px;
+    min-height: 53px;
 }
 
 @keyframes oceanFlow {
@@ -216,10 +216,11 @@ cols = st.columns([2, 1, 1, 1, 1, 1, 1])
 with cols[0]:
     st.markdown(
         "<div style='font-weight:700;font-size:1.2rem;"
-        "color:#1a1a2e;padding-top:6px;'>🏢 Gabriel-JL 雲端企業官網</div>",
+        "color:#ffffff;background:#1f6feb;"
+        "padding:8px 16px;border-radius:8px;"
+        "display:inline-block;'>🏢 Gabriel-JL 雲端企業官網</div>",
         unsafe_allow_html=True,
     )
-
 nav_items = [
     ("🏠 首頁", cols[1]), ("🛍️ 產品介紹", cols[2]),
     ("📝 組合詢價", cols[3]), ("🛒 購物車", cols[4]),
