@@ -9,7 +9,7 @@ import streamlit as st
 API_BASE = os.environ.get("API_BASE", "http://127.0.0.1:5000")
 
 st.set_page_config(
-    page_title="Gabriel-JL 雲端企業官網",
+    page_title="Gabriel-JL 雲端",
     page_icon="🏢",
     layout="wide",
     initial_sidebar_state="collapsed",
