@@ -216,9 +216,7 @@ cols = st.columns([2, 1, 1, 1, 1, 1, 1])
 with cols[0]:
     st.markdown(
         "<div style='font-weight:700;font-size:1.2rem;"
-        "color:#ffffff;background:#1f6feb;"
-        "padding:8px 16px;border-radius:8px;"
-        "display:inline-block;'>🏢 Gabriel-JL 雲端企業官網</div>",
+        "color:#1a1a2e;padding-top:6px;'>🏢 Gabriel-JL 雲端</div>",
         unsafe_allow_html=True,
     )
 nav_items = [
