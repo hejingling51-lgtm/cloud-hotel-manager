@@ -254,7 +254,7 @@ nav_items = [
 ]
 for label, col in nav_items:
     with col:
-        if st.button(label, use_container_width=True, key=f"nav_{label}"):
+        if st.button(label, use_column_width=True, key=f"nav_{label}"):
             st.session_state.page = label
             st.rerun()
 
