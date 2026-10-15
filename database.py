@@ -1,224 +1,188 @@
 # database.py
-from datetime import datetime, date
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import update, and_, or_
+from flask_cors import CORS
+from datetime import datetime
+import os
 
-db = SQLAlchemy()
+app = Flask(__name__)
+CORS(app)
 
+# 資料庫連線設定 (支援 Render PostgreSQL 或本機 SQLite)
+database_url = os.environ.get("DATABASE_URL", "sqlite:///sock_shop.db")
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
 
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# -------------------------------------------------------------
+# 資料庫模型 (Models)
+# -------------------------------------------------------------
 class Room(db.Model):
-    __tablename__ = "rooms"
+    __tablename__ = 'rooms'
     id = db.Column(db.Integer, primary_key=True)
-    room_no = db.Column(db.String(10), unique=True, nullable=False)
+    room_no = db.Column(db.String(20), unique=True, nullable=False)
     room_type = db.Column(db.String(50), nullable=False)
-    nightly_rate = db.Column(db.Numeric(10, 2), nullable=False)
-    capacity = db.Column(db.Integer, default=2)
-    status = db.Column(db.String(20), default="available")
-    # available / occupied / cleaning / maintenance
+    capacity = db.Column(db.Integer, default=1)
+    nightly_rate = db.Column(db.Float, nullable=False, default=280.0)
+    status = db.Column(db.String(20), default='available')
 
     def to_dict(self):
         return {
-            "id": self.id, "room_no": self.room_no,
+            "id": self.id,
+            "room_no": self.room_no,
             "room_type": self.room_type,
-            "nightly_rate": float(self.nightly_rate),
-            "capacity": self.capacity, "status": self.status,
+            "capacity": self.capacity,
+            "nightly_rate": self.nightly_rate,
+            "status": self.status
         }
 
-
 class Booking(db.Model):
-    __tablename__ = "bookings"
+    __tablename__ = 'bookings'
     id = db.Column(db.Integer, primary_key=True)
-    room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=False)  # 保留主關聯相容
     guest_name = db.Column(db.String(100), nullable=False)
-    guest_email = db.Column(db.String(160), nullable=False)
+    guest_email = db.Column(db.String(120), nullable=False)
     guest_phone = db.Column(db.String(30))
-    check_in = db.Column(db.Date, nullable=False)
-    check_out = db.Column(db.Date, nullable=False)
-    nights = db.Column(db.Integer, nullable=False)
-    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    payment_status = db.Column(db.String(20), default="pending")
-    # pending / paid / refunded / cancelled
-    stripe_session_id = db.Column(db.String(200))
-    booking_status = db.Column(db.String(20), default="reserved")
-    # reserved / checked_in / checked_out / cancelled
+    check_in = db.Column(db.String(20), nullable=False)
+    check_out = db.Column(db.String(20), nullable=False)
+    nights = db.Column(db.Integer, default=1)
+    total_amount = db.Column(db.Float, nullable=False)
+    payment_status = db.Column(db.String(20), default='pending')  # pending, paid
+    booking_status = db.Column(db.String(20), default='reserved') # reserved, cancelled
     note = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # 建立與明細表的關聯
+    items = db.relationship('OrderItem', backref='booking', lazy=True, cascade="all, delete-orphan")
+
     def to_dict(self):
         return {
-            "id": self.id, "room_id": self.room_id,
+            "id": self.id,
+            "room_id": self.room_id,
             "guest_name": self.guest_name,
             "guest_email": self.guest_email,
-            "guest_phone": self.guest_phone or "",
-            "check_in": self.check_in.isoformat(),
-            "check_out": self.check_out.isoformat(),
+            "guest_phone": self.guest_phone,
+            "check_in": self.check_in,
+            "check_out": self.check_out,
             "nights": self.nights,
-            "total_amount": float(self.total_amount),
+            "total_amount": self.total_amount,
             "payment_status": self.payment_status,
             "booking_status": self.booking_status,
-            "stripe_session_id": self.stripe_session_id or "",
-            "note": self.note or "",
-            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M"),
+            "note": self.note,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "items": [item.to_dict() for item in self.items]
+        }
+
+class OrderItem(db.Model):
+    __tablename__ = 'order_items'
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'), nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
+    unit_price = db.Column(db.Float, nullable=False)
+    subtotal = db.Column(db.Float, nullable=False)
+
+    room = db.relationship('Room', lazy=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "room_id": self.room_id,
+            "room_no": self.room.room_no if self.room else "",
+            "room_type": self.room.room_type if self.room else "",
+            "quantity": self.quantity,
+            "unit_price": self.unit_price,
+            "subtotal": self.subtotal
         }
 
 
-class VisitCounter(db.Model):
-    __tablename__ = "visit_counter"
-    id = db.Column(db.Integer, primary_key=True)
-    count = db.Column(db.Integer, nullable=False, default=0)
+# -------------------------------------------------------------
+# API 路由
+# -------------------------------------------------------------
+@app.route('/api/rooms', methods=['GET'])
+def get_rooms():
+    rooms = Room.query.all()
+    return jsonify([r.to_dict() for r in rooms])
 
-    @staticmethod
-    def get_count():
-        row = db.session.get(VisitCounter, 1)
-        if row is None:
-            row = VisitCounter(id=1, count=0)
-            db.session.add(row)
-            db.session.commit()
-        return row.count
+@app.route('/api/bookings', methods=['GET'])
+def get_bookings():
+    bookings = Booking.query.order_by(Booking.created_at.desc()).all()
+    return jsonify([b.to_dict() for b in bookings])
 
-    @staticmethod
-    def increment():
-        row = db.session.get(VisitCounter, 1)
-        if row is None:
-            row = VisitCounter(id=1, count=0)
-            db.session.add(row)
-            db.session.commit()
-        db.session.execute(
-            update(VisitCounter).where(VisitCounter.id == 1)
-            .values(count=VisitCounter.count + 1)
+@app.route('/api/bookings', methods=['POST'])
+def create_booking():
+    data = request.get_json() or {}
+    try:
+        cart_items = data.get("items", [])
+        # 相容舊版單一 room_id
+        if not cart_items and "room_id" in data:
+            cart_items = [{
+                "room_id": data.get("room_id"),
+                "unit_price": data.get("total_amount", 0),
+                "qty": data.get("quantity", 1)
+            }]
+
+        first_room_id = cart_items[0]["room_id"] if cart_items else 1
+
+        new_booking = Booking(
+            room_id=first_room_id,
+            guest_name=data.get("guest_name"),
+            guest_email=data.get("guest_email"),
+            guest_phone=data.get("guest_phone"),
+            check_in=data.get("check_in"),
+            check_out=data.get("check_out"),
+            nights=data.get("nights", 1),
+            total_amount=data.get("total_amount", 0),
+            note=data.get("note", "")
         )
+        db.session.add(new_booking)
+        db.session.flush()  # 取得 new_booking.id
+
+        # 寫入多筆訂單明細
+        for item in cart_items:
+            qty = int(item.get("qty", 1))
+            unit_price = float(item.get("unit_price", 0))
+            subtotal = qty * unit_price
+            order_item = OrderItem(
+                booking_id=new_booking.id,
+                room_id=item.get("room_id"),
+                quantity=qty,
+                unit_price=unit_price,
+                subtotal=subtotal
+            )
+            db.session.add(order_item)
+
         db.session.commit()
-        db.session.expire_all()
-        return db.session.get(VisitCounter, 1).count
+        return jsonify({"message": "訂單建立成功", "booking": new_booking.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
 
+@app.route('/api/ecpay/config', methods=['GET'])
+def ecpay_config():
+    return jsonify({"configured": True})
 
-# ---------- 業務函式 ----------
-def seed_rooms():
-    """若產品表為空，自動建立 24 間產品。"""
-    if Room.query.count() > 0:
-        return
-    for i in range(1, 25):
-        if i <= 12:
-            rtype, rate, cap = "成人襪", 280.00, 2
-        elif i <= 20:
-            rtype, rate, cap = "兒童襪", 480.00, 3
-        else:
-            rtype, rate, cap = "其它", 780.00, 4
-        db.session.add(Room(
-            room_no=f"R{i:03d}", room_type=rtype,
-            nightly_rate=rate, capacity=cap, status="available",
-        ))
-    db.session.commit()
+@app.route('/api/ecpay/create-order', methods=['POST'])
+def ecpay_create_order():
+    data = request.get_json() or {}
+    booking_id = data.get("booking_id")
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify({"error": "找不到訂單"}), 404
+    return jsonify({"redirect_url": f"/api/ecpay/mock-pay/{booking_id}"})
 
-
-def list_rooms():
-    return Room.query.order_by(Room.room_no).all()
-
-
-def get_room(room_id):
-    return db.session.get(Room, room_id)
-
-
-def list_bookings(limit=200):
-    return (Booking.query.order_by(Booking.created_at.desc())
-            .limit(limit).all())
-
-
-def is_room_available(room_id, check_in, check_out, exclude_booking_id=None):
-    """检查某房在日期区间内是否可用。"""
-    q = Booking.query.filter(
-        Booking.room_id == room_id,
-        Booking.booking_status.in_(["reserved", "checked_in"]),
-        Booking.check_in < check_out,
-        Booking.check_out > check_in,
-    )
-    if exclude_booking_id:
-        q = q.filter(Booking.id != exclude_booking_id)
-    return q.first() is None
-
-
-def create_booking(room_id, guest_name, guest_email, guest_phone,
-                   check_in, check_out, note="",
-                   quantity=None, total_override=None):
-    """
-    建立訂單。
-    """
-    room = get_room(room_id)
-    if not room:
-        raise ValueError("room_not_found")
-
-    # 允許同日下單（check_out == check_in）
-    if check_out < check_in:
-        raise ValueError("invalid_dates")
-
-    # 決定數量
-    if quantity is None:
-        quantity = max(1, (check_out - check_in).days)
-    else:
-        try:
-            quantity = max(1, int(quantity))
-        except (TypeError, ValueError):
-            quantity = 1
-
-    # 【已移除】買襪子不需要檢查房況佔用，直接略過此限制
-    # if not is_room_available(room_id, check_in, check_out):
-    #     raise ValueError("room_not_available")
-
-    # 以資料庫單價為基準計算金額
-    base_total = float(room.nightly_rate) * quantity
-
-    total = base_total
-    if total_override is not None:
-        try:
-            override = float(total_override)
-        except (TypeError, ValueError):
-            override = 0
-        # 安全檢查：不得低於原價 50%
-        if override > 0 and override >= base_total * 0.5:
-            total = override
-
-    b = Booking(
-        room_id=room_id,
-        guest_name=guest_name,
-        guest_email=guest_email,
-        guest_phone=guest_phone,
-        check_in=check_in,
-        check_out=check_out,
-        nights=quantity,
-        total_amount=total,
-        note=note,
-    )
-    db.session.add(b)
-    db.session.commit()
-    return b
-
-
-def update_booking_status(booking_id, booking_status=None,
-                          payment_status=None, stripe_session_id=None):
-    b = db.session.get(Booking, booking_id)
-    if not b:
-        return None
-    if booking_status:
-        b.booking_status = booking_status
-        room = get_room(b.room_id)
-        if room:
-            if booking_status == "checked_in":
-                room.status = "occupied"
-            elif booking_status == "checked_out":
-                room.status = "cleaning"
-            elif booking_status == "cancelled":
-                room.status = "available"
-    if payment_status:
-        b.payment_status = payment_status
-    if stripe_session_id:
-        b.stripe_session_id = stripe_session_id
-    db.session.commit()
-    return b
-
-
-def set_room_status(room_id, status):
-    room = get_room(room_id)
-    if room:
-        room.status = status
+@app.route('/api/ecpay/mock-pay/<int:booking_id>', methods=['GET'])
+def mock_pay(booking_id):
+    booking = Booking.query.get(booking_id)
+    if booking:
+        booking.payment_status = "paid"
         db.session.commit()
-    return room
+    return f"<h3>訂單 #{booking_id} 付款成功！請關閉此視窗返回系統。</h3>"
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(host='0.0.0.0', port=5000, debug=True)
