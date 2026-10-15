@@ -350,7 +350,7 @@ elif page == "📝 組合詢價":
             with c5:
                 st.write(f"NT${subtotal:,.0f}" if qty > 0 else "—")
 
-        selected = [(r, st.session_state[f"qty_{r['id']}"]} for r in rooms if st.session_state[f"qty_{r['id']}"] > 0]
+        selected = [(r, st.session_state[f"qty_{r['id']}"]) for r in rooms if st.session_state[f"qty_{r['id']}"] > 0]
         if selected:
             st.markdown("### 🧾 組合試算")
             total = sum(r["nightly_rate"] * qty for r, qty in selected)
