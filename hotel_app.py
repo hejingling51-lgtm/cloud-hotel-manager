@@ -252,7 +252,7 @@ if page == "🏠 首頁":
     st.markdown('<div class="section-title">熱門產品</div>', unsafe_allow_html=True)
     rooms = api_get_rooms()
     if rooms:
-        for i in range(0, min(len(rooms), 8), 4):
+        for i in range(0, min(len(rooms), 10), 4):
             cols4 = st.columns(4)
             for j, r in enumerate(rooms[i:i+4]):
                 with cols4[j]:
@@ -298,6 +298,70 @@ elif page == "🛍️ 產品介紹":
                             unsafe_allow_html=True,
                         )
 
+# ---------- 組合詢價 ----------
+elif page == "📝 組合詢價":
+    st.markdown('<div class="section-title">組合詢價</div>', unsafe_allow_html=True)
+    st.caption("點選 − / + 調整數量，系統即時試算總價。價格滿意即可加入購物車。")
+    rooms = api_get_rooms()
+    if rooms:
+        for r in rooms:
+            key = f"qty_{r['id']}"
+            if key not in st.session_state:
+                st.session_state[key] = 0
+
+        st.markdown("### 🛍️ 選擇產品與數量")
+        for r in rooms:
+            key = f"qty_{r['id']}"
+            qty = st.session_state[key]
+            subtotal = r["nightly_rate"] * qty
+            c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
+            with c1:
+                st.write(f"**{r['room_no']} {r['room_type']}** (NT${r['nightly_rate']:.0f}/單位)")
+            with c2:
+                if st.button("−", key=f"minus_{r['id']}", use_container_width=True):
+                    if st.session_state[key] > 0:
+                        st.session_state[key] -= 1
+                    st.rerun()
+            with c3:
+                st.write(f"**{qty}**")
+            with c4:
+                if st.button("+", key=f"plus_{r['id']}", use_container_width=True):
+                    st.session_state[key] += 1
+                    st.rerun()
+            with c5:
+                st.write(f"NT${subtotal:,.0f}" if qty > 0 else "—")
+
+        selected = [(r, st.session_state[f"qty_{r['id']}"]) for r in rooms if st.session_state[f"qty_{r['id']}"] > 0]
+        if selected:
+            st.markdown("### 🧾 組合試算")
+            total = sum(r["nightly_rate"] * qty for r, qty in selected)
+            for r, qty in selected:
+                st.write(f"- {r['room_no']} {r['room_type']} × {qty} = NT${r['nightly_rate'] * qty:,.0f}")
+            st.markdown(f"**總計：NT${total:,.0f}**")
+            if st.button("✅ 加入購物車", type="primary"):
+                for r, qty in selected:
+                    st.session_state.cart.append({"room_id": r["id"], "name": f"{r['room_no']} {r['room_type']}", "unit_price": r["nightly_rate"], "qty": qty})
+                    st.session_state[f"qty_{r['id']}"] = 0
+                st.success("已加入購物車！")
+                st.rerun()
+
+# ---------- 購物車 ----------
+elif page == "🛒 購物車":
+    st.markdown('<div class="section-title">購物車</div>', unsafe_allow_html=True)
+    cart = st.session_state.cart
+    if not cart:
+        st.info("購物車是空的，請至「📝 組合詢價」選擇產品。")
+    else:
+        total = 0
+        for i, item in enumerate(cart):
+            subtotal = item["unit_price"] * item["qty"]
+            total += subtotal
+            st.write(f"- **{item['name']}** × {item['qty']} = NT${subtotal:,.0f}")
+        st.markdown(f"### 總計：NT${total:,.0f}")
+        if st.button("🗑️ 清空購物車"):
+            st.session_state.cart = []
+            st.rerun()
+
 # ---------- 相片瀏覽 ----------
 elif page == "📷 相片瀏覽":
     st.markdown('<div class="section-title">本機相片瀏覽</div>', unsafe_allow_html=True)
@@ -319,8 +383,3 @@ elif page == "📷 相片瀏覽":
             st.warning("找不到圖片。")
     else:
         st.error("找不到 images 資料夾。")
-
-# ---------- 其它頁面 fallback ----------
-else:
-    st.markdown(f'<div class="section-title">{page}</div>', unsafe_allow_html=True)
-    st.info("此功能正常運作中。")
