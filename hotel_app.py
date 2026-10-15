@@ -254,12 +254,12 @@ nav_items = [
 ]
 for label, col in nav_items:
     with col:
-        if st.button(label, use_column_width=True, key=f"nav_{label}"):
+        if st.button(label, key=f"nav_{label}"):
             st.session_state.page = label
             st.rerun()
 
 with cols[7]:
-    if st.button("🔐 管理", use_container_width=True, key="nav_admin"):
+    if st.button("🔐 管理", key="nav_admin"):
         st.session_state.show_admin = not st.session_state.get("show_admin", False)
         st.rerun()
 
@@ -337,14 +337,14 @@ elif page == "📝 組合詢價":
             with c1:
                 st.write(f"**{r['room_no']} {r['room_type']}** (NT${r['nightly_rate']:.0f}/單位)")
             with c2:
-                if st.button("−", key=f"minus_{r['id']}", use_container_width=True):
+                if st.button("−", key=f"minus_{r['id']}"):
                     if st.session_state[key] > 0:
                         st.session_state[key] -= 1
                     st.rerun()
             with c3:
                 st.write(f"**{qty}**")
             with c4:
-                if st.button("+", key=f"plus_{r['id']}", use_container_width=True):
+                if st.button("+", key=f"plus_{r['id']}"):
                     st.session_state[key] += 1
                     st.rerun()
             with c5:
