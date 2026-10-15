@@ -305,7 +305,7 @@ elif page == "🛍️ 產品介紹":
                     with cols3[j]:
                         img_path = get_product_image(p['room_no'], p['room_type'])
                         if img_path:
-                            st.image(img_path, use_container_width=True)
+                            st.image(img_path, use_column_width=True)
                         else:
                             st.info("📷 暫無圖片")
                         st.markdown(
