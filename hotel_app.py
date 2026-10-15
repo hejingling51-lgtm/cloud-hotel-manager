@@ -301,14 +301,24 @@ if st.session_state.get("show_admin", False):
 page = st.session_state.page
 IMAGE_DIR = "images"
 
-def get_product_image(room_no):
+def get_product_image(room_no, room_type="成人襪"):
+    """根據產品編號與分類，自動至對應的中文子資料夾（成人襪/兒童襪）抓取圖片"""
     try:
         clean_no = str(room_no).upper().strip()
         if not clean_no.startswith("R"):
             clean_no = f"R{clean_no}"
-        img_path = os.path.join(IMAGE_DIR, f"{clean_no}.jpg")
+            
+        folder_name = "成人襪" if "成人" in str(room_type) else "兒童襪"
+        
+        # 1. 優先從中文子資料夾尋找
+        img_path = os.path.join(IMAGE_DIR, folder_name, f"{clean_no}.jpg")
         if os.path.exists(img_path):
             return img_path
+            
+        # 2. 備用：從 images 根目錄尋找
+        fallback_path = os.path.join(IMAGE_DIR, f"{clean_no}.jpg")
+        if os.path.exists(fallback_path):
+            return fallback_path
     except Exception:
         pass
     return None
@@ -326,22 +336,23 @@ if page == "🏠 首頁":
     st.markdown('<div class="section-title">熱門產品</div>', unsafe_allow_html=True)
     rooms = api_get_rooms()
     if rooms:
-        cols4 = st.columns(4)
-        for i, r in enumerate(rooms[:4]):
-            with cols4[i]:
-                img_path = get_product_image(r['room_no'])
-                if img_path:
-                    st.image(img_path, use_column_width=True)
-                else:
-                    st.info("📷 暫無圖片")
-                st.markdown(
-                    "<div class='prod-card' style='border-top:none; border-top-left-radius:0; border-top-right-radius:0;'>"
-                    f"<h4>{r['room_no']}</h4>"
-                    f"<p class='spec'>{r['room_type']} · 規格 {r['capacity']}</p>"
-                    f"<p class='price'>NT${r['nightly_rate']:.0f}<span>/ 單位</span></p>"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
+        for i in range(0, min(len(rooms), 8), 4):
+            cols4 = st.columns(4)
+            for j, r in enumerate(rooms[i:i+4]):
+                with cols4[j]:
+                    img_path = get_product_image(r['room_no'], r['room_type'])
+                    if img_path:
+                        st.image(img_path, use_column_width=True)
+                    else:
+                        st.info("📷 暫無圖片")
+                    st.markdown(
+                        "<div class='prod-card' style='border-top:none; border-top-left-radius:0; border-top-right-radius:0;'>"
+                        f"<h4>{r['room_no']}</h4>"
+                        f"<p class='spec'>{r['room_type']} · 規格 {r['capacity']}</p>"
+                        f"<p class='price'>NT${r['nightly_rate']:.0f}<span>/ 單位</span></p>"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
 
     st.markdown("""
     <div class="footer">
@@ -369,7 +380,7 @@ elif page == "🛍️ 產品介紹":
                 cols3 = st.columns(3)
                 for j, p in enumerate(items[i:i + 3]):
                     with cols3[j]:
-                        img_path = get_product_image(p['room_no'])
+                        img_path = get_product_image(p['room_no'], p['room_type'])
                         if img_path:
                             st.image(img_path, use_column_width=True)
                         else:
@@ -517,372 +528,4 @@ elif page == "🛒 購物車":
             total += subtotal
             c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
             with c1:
-                st.write(f"**{item['name']}**（NT${item['unit_price']:.0f}/單位）")
-            with c2:
-                if st.button("−", key=f"c_minus_{i}", use_container_width=True):
-                    if item["qty"] > 1:
-                        item["qty"] -= 1
-                    else:
-                        cart.pop(i)
-                    st.rerun()
-            with c3:
-                st.markdown(
-                    f"<div style='text-align:center;font-size:1.3rem;font-weight:700;padding-top:6px;'>{item['qty']}</div>",
-                    unsafe_allow_html=True,
-                )
-            with c4:
-                if st.button("+", key=f"c_plus_{i}", use_container_width=True):
-                    item["qty"] += 1
-                    st.rerun()
-            with c5:
-                st.markdown(
-                    f"<div style='text-align:right;color:#e94560;font-weight:700;padding-top:6px;'>NT${subtotal:,.0f}</div>",
-                    unsafe_allow_html=True,
-                )
-            st.markdown(
-                "<hr style='margin:6px 0;border:none;border-top:1px solid #f0f0f0;'>",
-                unsafe_allow_html=True,
-            )
-        st.markdown(
-            f"<div class='total-box'>"
-            f"<div class='label'>購物車總計</div>"
-            f"<div class='amount'>NT${total:,.0f}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("")
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("➡️ 前往結帳", type="primary", use_container_width=True):
-                st.session_state.page = "🛒 線上下單"
-                st.rerun()
-        with c2:
-            if st.button("🗑️ 清空購物車", use_container_width=True):
-                st.session_state.cart = []
-                st.rerun()
-
-# ---------- 線上下單 ----------
-elif page == "🛒 線上下單":
-    st.markdown('<div class="section-title">線上下單</div>', unsafe_allow_html=True)
-    st.caption("確認購物車內容並填寫聯絡資訊，系統將建立訂單並引導至綠界付款。")
-    cart = st.session_state.cart
-    if not cart:
-        st.warning("購物車是空的。請先至「📝 組合詢價」選擇產品。")
-    else:
-        st.markdown("### 🛒 訂單內容")
-        total = 0
-        for item in cart:
-            subtotal = item["unit_price"] * item["qty"]
-            total += subtotal
-            st.write(f"- {item['name']} × {item['qty']} = NT${subtotal:,.0f}")
-        st.markdown(
-            f"<div class='total-box'>"
-            f"<div class='label'>訂單總計</div>"
-            f"<div class='amount'>NT${total:,.0f}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("---")
-        st.markdown("### 📋 聯絡資訊")
-        with st.form("checkout"):
-            c1, c2 = st.columns(2)
-            with c1:
-                guest_name = st.text_input("聯絡人姓名 *")
-                guest_email = st.text_input("Email *")
-                guest_phone = st.text_input("電話")
-            with c2:
-                company = st.text_input("公司名稱")
-                tax_id = st.text_input("統一編號")
-                delivery = st.date_input("希望交期", value=date.today() + timedelta(days=7))
-            note = st.text_area("備註（規格、包裝、發票等）", height=80)
-            submitted = st.form_submit_button("建立訂單")
-        if submitted:
-            if not guest_name or not guest_email:
-                st.error("聯絡人與 Email 必填")
-            else:
-                first = cart[0]
-                note_full = (
-                    "[購物車明細]\n"
-                    + "\n".join(f"{i['name']} × {i['qty']}" for i in cart)
-                    + (f"\n公司：{company}" if company else "")
-                    + (f"\n統編：{tax_id}" if tax_id else "")
-                    + (f"\n備註：{note}" if note else "")
-                )
-                payload = {
-                    "room_id": first["room_id"],
-                    "guest_name": guest_name,
-                    "guest_email": guest_email,
-                    "guest_phone": guest_phone,
-                    "check_in": date.today().isoformat(),
-                    "check_out": delivery.isoformat(),
-                    "note": note_full,
-                    "quantity": sum(i["qty"] for i in cart),
-                    "total_amount": total,
-                }
-                ok, res = api_create_booking(payload)
-                if ok:
-                    b = res["booking"]
-                    st.success(f"✅ 訂單 #{b['id']} 已建立，金額 NT${b['total_amount']:,.0f}")
-                    st.session_state.cart = []
-                    st.session_state["last_booking_id"] = b["id"]
-                    st.info("請至「💰 帳單與收款」完成付款。")
-                else:
-                    st.error(f"建立失敗：{res.get('error')}")
-
-# ---------- 相片瀏覽 ----------
-elif page == "📷 相片瀏覽":
-    st.markdown('<div class="section-title">本機相片瀏覽</div>', unsafe_allow_html=True)
-    st.caption("請確認路徑指向您的 images 資料夾（預設為 images）。")
-
-    image_dir = st.text_input("圖片資料夾路徑", value="images")
-
-    if image_dir:
-        image_dir = image_dir.strip('"').strip("'")
-
-        if os.path.exists(image_dir) and os.path.isdir(image_dir):
-            valid_extensions = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
-            try:
-                files = os.listdir(image_dir)
-                img_files = [f for f in files if f.lower().endswith(valid_extensions)]
-
-                if not img_files:
-                    st.warning(f"在路徑 `{image_dir}` 中找不到任何支援的圖片檔案。")
-                else:
-                    st.success(f"成功找到 {len(img_files)} 張圖片！")
-                    cols_per_row = 3
-                    for i in range(0, len(img_files), cols_per_row):
-                        row_files = img_files[i:i + cols_per_row]
-                        cols = st.columns(cols_per_row)
-                        for idx, img_name in enumerate(row_files):
-                            img_path = os.path.join(image_dir, img_name)
-                            try:
-                                with cols[idx]:
-                                    st.image(img_path, caption=img_name, use_column_width=True)
-                            except Exception:
-                                cols[idx].error(f"無法載入：{img_name}")
-            except Exception as e:
-                st.error(f"讀取資料夾時發生錯誤：{e}")
-        else:
-            st.error(f"找不到指定的資料夾路徑：`{image_dir}`，請檢查路徑是否正確。")
-
-# ---------- 聯絡我們 ----------
-elif page == "📞 聯絡我們":
-    st.markdown('<div class="section-title">聯絡我們</div>', unsafe_allow_html=True)
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.markdown("""
-        ### 業務洽詢
-        - 📞 電話：02-25500684, 0928185292
-        - 📧 Email：hejingling51@gmail.com
-        - 🏢 地址：台北市大同區寧夏路20號9樓
-        - 🕘 服務時間：週一至週五 09:00 - 18:00
-        """)
-    with c2:
-        st.markdown("""
-        ### 大量採購 / 客製需求
-        請使用「📝 組合詢價」功能，即時試算組合價格，滿意的話直接加入購物車結帳。
-        若已有訂單需要付款，請至「💰 帳單與收款」頁面。
-        """)
-
-# ============================================================
-#  管理員頁面
-# ============================================================
-elif page == "📦 產品庫存看板":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        rooms = api_get_rooms()
-        if not rooms:
-            st.warning("無法讀取產品資料。")
-        else:
-            st.markdown(f"### 共 {len(rooms)} 筆產品")
-            status_color = {
-                "available": "🟢 有貨", "occupied": "🔴 出貨中",
-                "cleaning": "🟡 補貨中", "maintenance": "⚫ 停售",
-            }
-            for i in range(0, len(rooms), 4):
-                cols4 = st.columns(4)
-                for j, r in enumerate(rooms[i:i + 4]):
-                    with cols4[j]:
-                        color = status_color.get(r["status"], r["status"])
-                        st.markdown(
-                            "<div class='prod-card'>"
-                            f"<h4>{r['room_no']}</h4>"
-                            f"<p class='spec'>{r['room_type']}</p>"
-                            f"<p class='price'>NT${r['nightly_rate']:.0f}</p>"
-                            f"<p>{color}</p>"
-                            "</div>",
-                            unsafe_allow_html=True,
-                        )
-            st.markdown("---")
-            st.markdown("### 🔧 快速修改庫存狀態")
-            room_opts = {f"{r['room_no']} ({r['room_type']})": r["id"] for r in rooms}
-            sel = st.selectbox("選擇產品", list(room_opts.keys()))
-            new_status = st.selectbox(
-                "新狀態",
-                ["available", "occupied", "cleaning", "maintenance"],
-                format_func=lambda x: status_color[x],
-            )
-            if st.button("更新狀態"):
-                if api_set_room_status(room_opts[sel], new_status):
-                    st.success("✅ 已更新")
-                    st.rerun()
-                else:
-                    st.error("更新失敗")
-
-elif page == "📋 訂單管理":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        bookings = api_get_bookings()
-        st.markdown("### 📋 訂單列表")
-        if not bookings:
-            st.info("尚無訂單")
-        else:
-            df = pd.DataFrame([{
-                "ID": b["id"], "產品": b["room_id"], "聯絡人": b["guest_name"],
-                "下單日": b["check_in"], "交期": b["check_out"],
-                "數量": b["nights"], "金額": f"NT${b['total_amount']:,.0f}",
-                "付款": b["payment_status"], "狀態": b["booking_status"],
-            } for b in bookings])
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-elif page == "🚚 出貨 / 收貨":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        bookings = api_get_bookings()
-        if not bookings:
-            st.info("尚無訂單")
-        else:
-            st.markdown("### 🚚 出貨 / 收貨 操作")
-            for b in bookings:
-                if b["booking_status"] in ("cancelled", "checked_out"):
-                    continue
-                with st.expander(
-                    f"#{b['id']} · {b['guest_name']} · "
-                    f"產品 {b['room_id']} · {b['booking_status']}"
-                ):
-                    cols3 = st.columns(3)
-                    with cols3[0]:
-                        if b["booking_status"] == "reserved" and st.button(
-                            "✅ 確認出貨", key=f"ship_{b['id']}"
-                        ):
-                            ok, _ = api_update_booking(b["id"], booking_status="checked_in")
-                            if ok:
-                                st.success("已出貨")
-                                st.rerun()
-                    with cols3[1]:
-                        if b["booking_status"] == "checked_in" and st.button(
-                            "📦 確認收貨", key=f"recv_{b['id']}"
-                        ):
-                            ok, _ = api_update_booking(b["id"], booking_status="checked_out")
-                            if ok:
-                                st.success("已收貨")
-                                st.rerun()
-                    with cols3[2]:
-                        if b["booking_status"] == "reserved" and st.button(
-                            "❌ 取消訂單", key=f"cx_{b['id']}"
-                        ):
-                            ok, _ = api_update_booking(b["id"], booking_status="cancelled")
-                            if ok:
-                                st.success("已取消")
-                                st.rerun()
-
-elif page == "💰 帳單與收款":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        cfg = api_ecpay_config()
-        if not cfg.get("configured"):
-            st.error("⚠️ 綠界 ECPay 尚未設定，請先至「⚙️ 綠界設定」頁面確認。")
-        bookings = api_get_bookings()
-        pending = [b for b in bookings
-                   if b["payment_status"] == "pending"
-                   and b["booking_status"] != "cancelled"]
-        st.markdown("### 💳 待付款訂單")
-        if not pending:
-            st.info("目前沒有待付款訂單")
-        else:
-            for b in pending:
-                with st.expander(
-                    f"#{b['id']} · {b['guest_name']} · NT${b['total_amount']:,.0f}"
-                ):
-                    st.write(f"**產品：** {b['room_id']}")
-                    st.write(f"**交期：** {b['check_out']}")
-                    st.write(f"**數量：** {b['nights']}")
-                    st.write(f"**聯絡人：** {b['guest_email']}")
-                    if b.get("note"):
-                        st.text(b["note"])
-                    if b.get("stripe_session_id"):
-                        st.caption(f"綠界交易編號：`{b['stripe_session_id']}`")
-                    if st.button(
-                        f"💳 產生綠界付款連結 #{b['id']}",
-                        key=f"pay_{b['id']}"
-                    ):
-                        ok, res = api_ecpay_create_order(b["id"])
-                        if ok:
-                            redirect_url = f"{API_BASE}{res['redirect_url']}"
-                            st.session_state[f"ecpay_url_{b['id']}"] = redirect_url
-                            st.success("✅ 付款表單已產生")
-                        else:
-                            st.error(f"建立訂單失敗：{res.get('error')}")
-                    url_key = f"ecpay_url_{b['id']}"
-                    if url_key in st.session_state:
-                        st.markdown(
-                            f'<a href="{st.session_state[url_key]}" '
-                            'target="_blank" style="display:inline-block;'
-                            'padding:12px 24px;background:#635BFF;'
-                            'color:#fff;border-radius:8px;'
-                            'text-decoration:none;font-weight:bold;'
-                            'margin-top:8px;">'
-                            '👉 點此前往綠界付款頁面</a>',
-                            unsafe_allow_html=True,
-                        )
-                        st.caption(f"連結：{st.session_state[url_key]}")
-        st.markdown("---")
-        st.markdown("### 📊 收款總覽")
-        if bookings:
-            total_paid = sum(b["total_amount"] for b in bookings
-                             if b["payment_status"] == "paid")
-            total_pending = sum(b["total_amount"] for b in bookings
-                                if b["payment_status"] == "pending")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("已收款", f"NT${total_paid:,.0f}")
-            c2.metric("待收款", f"NT${total_pending:,.0f}")
-            c3.metric("訂單總數", len(bookings))
-
-elif page == "📑 RFQ 管理":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        st.markdown("### 📑 RFQ 詢價單管理")
-        st.info("目前購物車儲存在瀏覽器 session，尚未啟用資料庫 RFQ 功能。")
-
-elif page == "⚙️ 綠界設定":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        st.markdown("### ⚙️ 綠界 ECPay 設定檢查")
-        cfg = api_ecpay_config()
-        if cfg.get("configured"):
-            st.success("✅ 綠界 ECPay 已設定完成")
-        else:
-            st.error("❌ 綠界 ECPay 尚未設定，請檢查後端環境變數")
-        st.markdown("#### 目前設定")
-        st.write(f"**API URL：** `{cfg.get('api_url', '未設定')}`")
-        st.write(f"**MerchantID：** `{cfg.get('merchant_id', '未設定')}`")
-        st.markdown("---")
-        st.markdown("#### 後端環境變數清單")
-        st.code("""
-ECPAY_MERCHANT_ID=你的特店編號
-ECPAY_HASH_KEY=你的HashKey
-ECPAY_HASH_IV=你的HashIV
-ECPAY_API_URL=https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5
-ECPAY_RETURN_URL=https://your-domain.com/api/ecpay/notify
-""", language="bash")
-        st.info(
-            "ℹ️ 正式上線前，請向綠界申請正式特約商店帳號，"
-            "並將 ECPAY_API_URL 改為正式環境：\n"
-            "`https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5`"
-        )
+                st.write(f"**
