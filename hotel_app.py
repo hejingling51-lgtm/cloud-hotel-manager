@@ -116,7 +116,7 @@ st.markdown("""
 
 
 # ============================================================
-#  API 與資料處理輔助 (含強固防呆)
+#  API 與資料處理輔助 (含強固防呆與雲端獨立預設資料)
 # ============================================================
 def _get(path, default=None, timeout=8):
     try:
@@ -137,15 +137,21 @@ def _post(path, payload=None, timeout=8):
 
 
 def process_rooms(rooms):
-    processed = []
-    if not isinstance(rooms, list):
+    if not isinstance(rooms, list) or len(rooms) == 0:
         rooms = [
-            {"id": 1, "room_no": "R0001", "room_type": "成人襪", "capacity": 2, "nightly_rate": 280, "status": "available"},
-            {"id": 2, "room_no": "R0002", "room_type": "成人襪", "capacity": 2, "nightly_rate": 280, "status": "available"},
-            {"id": 13, "room_no": "R0013", "room_type": "兒童襪", "capacity": 2, "nightly_rate": 250, "status": "available"},
-            {"id": 14, "room_no": "R0014", "room_type": "兒童襪", "capacity": 2, "nightly_rate": 250, "status": "available"},
+            {"id": 1, "room_no": "R0001", "room_type": "成人襪", "capacity": 1, "nightly_rate": 280, "status": "available"},
+            {"id": 2, "room_no": "R0002", "room_type": "成人襪", "capacity": 1, "nightly_rate": 280, "status": "available"},
+            {"id": 3, "room_no": "R0003", "room_type": "成人襪", "capacity": 1, "nightly_rate": 280, "status": "available"},
+            {"id": 4, "room_no": "R0004", "room_type": "成人襪", "capacity": 1, "nightly_rate": 280, "status": "available"},
+            {"id": 5, "room_no": "R0005", "room_type": "成人襪", "capacity": 1, "nightly_rate": 280, "status": "available"},
+            {"id": 13, "room_no": "R0013", "room_type": "兒童襪", "capacity": 1, "nightly_rate": 250, "status": "available"},
+            {"id": 14, "room_no": "R0014", "room_type": "兒童襪", "capacity": 1, "nightly_rate": 250, "status": "available"},
+            {"id": 15, "room_no": "R0015", "room_type": "兒童襪", "capacity": 1, "nightly_rate": 250, "status": "available"},
+            {"id": 16, "room_no": "R0016", "room_type": "兒童襪", "capacity": 1, "nightly_rate": 250, "status": "available"},
+            {"id": 17, "room_no": "R0017", "room_type": "兒童襪", "capacity": 1, "nightly_rate": 250, "status": "available"},
         ]
         
+    processed = []
     for r in rooms:
         if not isinstance(r, dict):
             continue
@@ -164,12 +170,12 @@ def process_rooms(rooms):
                 r_copy["room_type"] = r_copy.get("room_type", "成人襪")
                 
             r_copy["nightly_rate"] = float(r_copy.get("nightly_rate", 280) or 280)
-            r_copy["capacity"] = int(r_copy.get("capacity", 2) or 2)
+            r_copy["capacity"] = int(r_copy.get("capacity", 1) or 1)
             r_copy["status"] = r_copy.get("status", "available")
             r_copy["id"] = r_copy.get("id", num)
         except Exception:
             r_copy["nightly_rate"] = 280.0
-            r_copy["capacity"] = 2
+            r_copy["capacity"] = 1
             r_copy["room_type"] = "成人襪"
             r_copy["status"] = "available"
         processed.append(r_copy)
@@ -178,10 +184,10 @@ def process_rooms(rooms):
 
 def api_get_rooms():
     try:
-        r = requests.get(f"{API_BASE}/api/rooms", timeout=5)
+        r = requests.get(f"{API_BASE}/api/rooms", timeout=3)
         if r.ok:
             data = r.json()
-            if isinstance(data, list):
+            if isinstance(data, list) and len(data) > 0:
                 return process_rooms(data)
     except Exception:
         pass
@@ -344,7 +350,7 @@ if page == "🏠 首頁":
             with cols4[i]:
                 img_path = get_product_image(r['room_no'])
                 if img_path:
-                    st.image(img_path, use_container_width=True)
+                    st.image(img_path, use_column_width=True)
                 else:
                     st.info("📷 暫無圖片")
 
@@ -372,7 +378,7 @@ elif page == "🛍️ 產品介紹":
 
     rooms = api_get_rooms()
     if not rooms:
-        st.warning("無法讀取產品資料，請確認後端 API 是否運行。")
+        st.warning("無法讀取產品資料。")
     else:
         types = {}
         for r in rooms:
@@ -386,7 +392,7 @@ elif page == "🛍️ 產品介紹":
                     with cols3[j]:
                         img_path = get_product_image(p['room_no'])
                         if img_path:
-                            st.image(img_path, use_container_width=True)
+                            st.image(img_path, use_column_width=True)
                         else:
                             st.info("📷 暫無圖片")
 
@@ -680,7 +686,7 @@ elif page == "📷 相片瀏覽":
                             img_path = os.path.join(image_dir, img_name)
                             try:
                                 with cols[idx]:
-                                    st.image(img_path, caption=img_name, use_container_width=True)
+                                    st.image(img_path, caption=img_name, use_column_width=True)
                             except Exception as img_err:
                                 cols[idx].error(f"無法載入：{img_name}")
             except Exception as e:
@@ -891,35 +897,4 @@ elif page == "📑 RFQ 管理":
     if not is_admin:
         st.error("請先登入管理員帳號（點右上角 🔐 管理）")
     else:
-        st.markdown("### 📑 RFQ 詢價單管理")
-        st.info("目前購物車儲存在瀏覽器 session，尚未啟用資料庫 RFQ 功能。")
-
-
-# ---------- 綠界設定 ----------
-elif page == "⚙️ 綠界設定":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        st.markdown("### ⚙️ 綠界 ECPay 設定檢查")
-        cfg = api_ecpay_config()
-        if cfg.get("configured"):
-            st.success("✅ 綠界 ECPay 已設定完成")
-        else:
-            st.error("❌ 綠界 ECPay 尚未設定，請檢查後端環境變數")
-        st.markdown("#### 目前設定")
-        st.write(f"**API URL：** `{cfg.get('api_url', '未設定')}`")
-        st.write(f"**MerchantID：** `{cfg.get('merchant_id', '未設定')}`")
-        st.markdown("---")
-        st.markdown("#### 後端環境變數清單")
-        st.code("""
-ECPAY_MERCHANT_ID=你的特店編號
-ECPAY_HASH_KEY=你的HashKey
-ECPAY_HASH_IV=你的HashIV
-ECPAY_API_URL=https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5
-ECPAY_RETURN_URL=https://your-domain.com/api/ecpay/notify
-""", language="bash")
-        st.info(
-            "ℹ️ 正式上線前，請向綠界申請正式特約商店帳號，"
-            "並將 ECPAY_API_URL 改為正式環境：\n"
-            "`https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5`"
-        )
+        st.markdown("###
