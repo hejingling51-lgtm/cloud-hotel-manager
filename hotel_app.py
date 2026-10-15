@@ -96,7 +96,7 @@ st.markdown("""
 /* ============ 一般產品卡片 ============ */
 .prod-card {
     border: 1px solid #eee; border-radius: 16px;
-    padding: 22px; text-align: center; background: #fff;
+    padding: 16px; text-align: center; background: #fff;
     box-shadow: 0 4px 14px rgba(0,0,0,0.06); height: 100%;
 }
 .prod-card h4 {margin: 0 0 6px; color: #1a1a2e; font-size: 1.2rem;}
@@ -124,7 +124,7 @@ st.markdown("""
 
 
 # ============================================================
-#  API
+#  API 與資料處理輔助
 # ============================================================
 def _get(path, default=None, timeout=8):
     try:
@@ -144,8 +144,28 @@ def _post(path, payload=None, timeout=8):
         return False, {"error": str(e)}
 
 
+def process_rooms(rooms):
+    """處理產品分類：將 R0013-R0017 強制歸類為兒童襪區，R0001-R0005 歸類為成人襪區"""
+    processed = []
+    for r in rooms:
+        r_copy = r.copy()
+        try:
+            num = int(str(r_copy["room_no"]).upper().replace("R", ""))
+            r_copy["room_no"] = f"R{num:04d}"  # 確保格式為 R0013 ~ R0017 等
+            
+            if 13 <= num <= 17:
+                r_copy["room_type"] = "兒童襪"
+            elif 1 <= num <= 5:
+                r_copy["room_type"] = "成人襪"
+        except Exception:
+            pass
+        processed.append(r_copy)
+    return processed
+
+
 def api_get_rooms():
-    return _get("/api/rooms", [])
+    raw_rooms = _get("/api/rooms", [])
+    return process_rooms(raw_rooms)
 
 
 def api_set_room_status(room_id, status):
@@ -174,8 +194,7 @@ def api_ecpay_config():
 
 
 def api_ecpay_create_order(booking_id):
-    return _post("/api/ecpay/create-order",
-                 {"booking_id": booking_id}, timeout=10)
+    return _post("/api/ecpay/create-order", {"booking_id": booking_id}, timeout=10)
 
 
 def api_get_visits():
@@ -212,17 +231,17 @@ ADMIN_PAGES = ["📦 產品庫存看板", "📋 訂單管理", "🚚 出貨 / �
 # ============================================================
 #  頂部導航
 # ============================================================
-cols = st.columns([2, 1, 1, 1, 1, 1, 1])
+cols = st.columns([1.5, 1, 1, 1, 1, 1, 1, 1])
 with cols[0]:
     st.markdown(
-        "<div style='font-weight:700;font-size:1.2rem;"
+        "<div style='font-weight:700;font-size:1.1rem;"
         "color:#1a1a2e;padding-top:6px;'>🏢 Gabriel-JL 雲端</div>",
         unsafe_allow_html=True,
     )
 nav_items = [
     ("🏠 首頁", cols[1]), ("🛍️ 產品介紹", cols[2]),
     ("📝 組合詢價", cols[3]), ("🛒 購物車", cols[4]),
-    ("🛒 線上下單", cols[5]),
+    ("🛒 線上下單", cols[5]), ("📷 相片瀏覽", cols[6]),
 ]
 for label, col in nav_items:
     with col:
@@ -230,7 +249,7 @@ for label, col in nav_items:
             st.session_state.page = label
             st.rerun()
 
-with cols[6]:
+with cols[7]:
     if st.button("🔐 管理", use_container_width=True, key="nav_admin"):
         st.session_state.show_admin = not st.session_state.get("show_admin", False)
         st.rerun()
@@ -269,6 +288,23 @@ if st.session_state.get("show_admin", False):
 #  頁面路由
 # ============================================================
 page = st.session_state.page
+IMAGE_DIR = "images"  # 使用專案根目錄下的相對路徑
+
+
+def get_product_image(room_no):
+    """根據產品編號精準抓取 images 資料夾中的圖片（例如 R0013 對應 images/R0013.jpg）"""
+    try:
+        clean_no = str(room_no).upper().strip()
+        if not clean_no.startswith("R"):
+            clean_no = f"R{clean_no}"
+            
+        img_path = os.path.join(IMAGE_DIR, f"{clean_no}.jpg")
+        if os.path.exists(img_path):
+            return img_path
+    except Exception:
+        pass
+    return None
+
 
 # ---------- 首頁 ----------
 if page == "🏠 首頁":
@@ -287,8 +323,14 @@ if page == "🏠 首頁":
         cols4 = st.columns(4)
         for i, r in enumerate(rooms[:4]):
             with cols4[i]:
+                img_path = get_product_image(r['room_no'])
+                if img_path:
+                    st.image(img_path, use_container_width=True)
+                else:
+                    st.info("📷 暫無圖片")
+
                 st.markdown(f"""
-                <div class="prod-card">
+                <div class="prod-card" style="border-top:none; border-top-left-radius:0; border-top-right-radius:0;">
                   <h4>{r['room_no']}</h4>
                   <p class="spec">{r['room_type']} · 規格 {r['capacity']}</p>
                   <p class="price">NT${r['nightly_rate']:.0f}
@@ -298,8 +340,8 @@ if page == "🏠 首頁":
 
     st.markdown("""
     <div class="footer">
-      © 2026 雲端企業官網 · B2B 採購平台　|　
-      綠界 ECPay 金流串接　|　Powered by Streamlit + Flask + PostgreSQL
+      © 2026 雲端企業官網 · B2B 採購平台 | 
+      綠界 ECPay 金流串接 | Powered by Streamlit + Flask + PostgreSQL
     </div>
     """, unsafe_allow_html=True)
 
@@ -324,8 +366,14 @@ elif page == "🛍️ 產品介紹":
                 cols3 = st.columns(3)
                 for j, p in enumerate(items[i:i + 3]):
                     with cols3[j]:
+                        img_path = get_product_image(p['room_no'])
+                        if img_path:
+                            st.image(img_path, use_container_width=True)
+                        else:
+                            st.info("📷 暫無圖片")
+
                         st.markdown(f"""
-                        <div class="prod-card">
+                        <div class="prod-card" style="border-top:none; border-top-left-radius:0; border-top-right-radius:0;">
                           <h4>{p['room_no']}</h4>
                           <p class="spec">{p['room_type']} · 規格 {p['capacity']}</p>
                           <p class="price">NT${p['nightly_rate']:.0f}
@@ -357,7 +405,7 @@ elif page == "📝 組合詢價":
             c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
             with c1:
                 st.markdown(
-                    f"**{r['room_no']} {r['room_type']}**　"
+                    f"**{r['room_no']} {r['room_type']}** "
                     f"<span style='color:#888;'>NT${r['nightly_rate']:.0f}/單位</span>",
                     unsafe_allow_html=True,
                 )
@@ -593,6 +641,46 @@ elif page == "🛒 線上下單":
                     st.error(f"建立失敗：{res.get('error')}")
 
 
+# ---------- 相片瀏覽 ----------
+elif page == "📷 相片瀏覽":
+    st.markdown('<div class="section-title">本機相片瀏覽</div>', unsafe_allow_html=True)
+    st.caption("請確認路徑指向您的 images 資料夾（預設為 images）。")
+
+    image_dir = st.text_input("圖片資料夾路徑", value="images")
+
+    if image_dir:
+        image_dir = image_dir.strip('"').strip("'")
+
+        if os.path.exists(image_dir) and os.path.isdir(image_dir):
+            valid_extensions = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+            
+            try:
+                files = os.listdir(image_dir)
+                img_files = [f for f in files if f.lower().endswith(valid_extensions)]
+
+                if not img_files:
+                    st.warning(f"在路徑 `{image_dir}` 中找不到任何支援的圖片檔案。")
+                else:
+                    st.success(f"成功找到 {len(img_files)} 張圖片！")
+
+                    cols_per_row = 3
+                    for i in range(0, len(img_files), cols_per_row):
+                        row_files = img_files[i:i + cols_per_row]
+                        cols = st.columns(cols_per_row)
+                        
+                        for idx, img_name in enumerate(row_files):
+                            img_path = os.path.join(image_dir, img_name)
+                            try:
+                                with cols[idx]:
+                                    st.image(img_path, caption=img_name, use_container_width=True)
+                            except Exception as img_err:
+                                cols[idx].error(f"無法載入：{img_name}")
+            except Exception as e:
+                st.error(f"讀取資料夾時發生錯誤：{e}")
+        else:
+            st.error(f"找不到指定的資料夾路徑：`{image_dir}`，請檢查路徑是否正確。")
+
+
 # ---------- 聯絡我們 ----------
 elif page == "📞 聯絡我們":
     st.markdown('<div class="section-title">聯絡我們</div>',
@@ -704,130 +792,4 @@ elif page == "🚚 出貨 / 收貨":
                             "✅ 確認出貨", key=f"ship_{b['id']}"
                         ):
                             ok, _ = api_update_booking(
-                                b["id"], booking_status="checked_in")
-                            if ok:
-                                st.success("已出貨")
-                                st.rerun()
-                    with cols3[1]:
-                        if b["booking_status"] == "checked_in" and st.button(
-                            "📦 確認收貨", key=f"recv_{b['id']}"
-                        ):
-                            ok, _ = api_update_booking(
-                                b["id"], booking_status="checked_out")
-                            if ok:
-                                st.success("已收貨")
-                                st.rerun()
-                    with cols3[2]:
-                        if b["booking_status"] == "reserved" and st.button(
-                            "❌ 取消訂單", key=f"cx_{b['id']}"
-                        ):
-                            ok, _ = api_update_booking(
-                                b["id"], booking_status="cancelled")
-                            if ok:
-                                st.success("已取消")
-                                st.rerun()
-
-
-# ---------- 帳單與收款 ----------
-elif page == "💰 帳單與收款":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        cfg = api_ecpay_config()
-        if not cfg.get("configured"):
-            st.error("⚠️ 綠界 ECPay 尚未設定，請先至「⚙️ 綠界設定」頁面確認。")
-        bookings = api_get_bookings()
-        pending = [b for b in bookings
-                   if b["payment_status"] == "pending"
-                   and b["booking_status"] != "cancelled"]
-        st.markdown("### 💳 待付款訂單")
-        if not pending:
-            st.info("目前沒有待付款訂單")
-        else:
-            for b in pending:
-                with st.expander(
-                    f"#{b['id']} · {b['guest_name']} · NT${b['total_amount']:,.0f}"
-                ):
-                    st.write(f"**產品：** {b['room_id']}")
-                    st.write(f"**交期：** {b['check_out']}")
-                    st.write(f"**數量：** {b['nights']}")
-                    st.write(f"**聯絡人：** {b['guest_email']}")
-                    if b.get("note"):
-                        st.text(b["note"])
-                    if b.get("stripe_session_id"):
-                        st.caption(f"綠界交易編號：`{b['stripe_session_id']}`")
-                    if st.button(
-                        f"💳 產生綠界付款連結 #{b['id']}",
-                        key=f"pay_{b['id']}"
-                    ):
-                        ok, res = api_ecpay_create_order(b["id"])
-                        if ok:
-                            redirect_url = f"{API_BASE}{res['redirect_url']}"
-                            st.session_state[f"ecpay_url_{b['id']}"] = redirect_url
-                            st.success("✅ 付款表單已產生")
-                        else:
-                            st.error(f"建立訂單失敗：{res.get('error')}")
-                    url_key = f"ecpay_url_{b['id']}"
-                    if url_key in st.session_state:
-                        st.markdown(
-                            f'<a href="{st.session_state[url_key]}" '
-                            f'target="_blank" style="display:inline-block;'
-                            f'padding:12px 24px;background:#635BFF;'
-                            f'color:#fff;border-radius:8px;'
-                            f'text-decoration:none;font-weight:bold;'
-                            f'margin-top:8px;">'
-                            f'👉 點此前往綠界付款頁面</a>',
-                            unsafe_allow_html=True,
-                        )
-                        st.caption(f"連結：{st.session_state[url_key]}")
-        st.markdown("---")
-        st.markdown("### 📊 收款總覽")
-        if bookings:
-            total_paid = sum(b["total_amount"] for b in bookings
-                             if b["payment_status"] == "paid")
-            total_pending = sum(b["total_amount"] for b in bookings
-                                if b["payment_status"] == "pending")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("已收款", f"NT${total_paid:,.0f}")
-            c2.metric("待收款", f"NT${total_pending:,.0f}")
-            c3.metric("訂單總數", len(bookings))
-
-
-# ---------- RFQ 管理 ----------
-elif page == "📑 RFQ 管理":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        st.markdown("### 📑 RFQ 詢價單管理")
-        st.info("目前購物車儲存在瀏覽器 session，尚未啟用資料庫 RFQ 功能。")
-
-
-# ---------- 綠界設定 ----------
-# ---------- 綠界設定 ----------
-elif page == "⚙️ 綠界設定":
-    if not is_admin:
-        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
-    else:
-        st.markdown("### ⚙️ 綠界 ECPay 設定檢查")
-        cfg = api_ecpay_config()
-        if cfg.get("configured"):
-            st.success("✅ 綠界 ECPay 已設定完成")
-        else:
-            st.error("❌ 綠界 ECPay 尚未設定，請檢查後端環境變數")
-        st.markdown("#### 目前設定")
-        st.write(f"**API URL：** `{cfg.get('api_url', '未設定')}`")
-        st.write(f"**MerchantID：** `{cfg.get('merchant_id', '未設定')}`")
-        st.markdown("---")
-        st.markdown("#### 後端環境變數清單")
-        st.code("""
-ECPAY_MERCHANT_ID=你的特店編號
-ECPAY_HASH_KEY=你的HashKey
-ECPAY_HASH_IV=你的HashIV
-ECPAY_API_URL=https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5
-ECPAY_RETURN_URL=https://your-domain.com/api/ecpay/notify
-""", language="bash")
-        st.info(
-            "ℹ️ 正式上線前，請向綠界申請正式特約商店帳號，"
-            "並將 ECPAY_API_URL 改為正式環境：\n"
-            "`https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5`"
-        )
+                                b["id"], booking
