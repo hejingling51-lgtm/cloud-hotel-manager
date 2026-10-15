@@ -277,7 +277,7 @@ if page == "🏠 首頁":
                 with cols4[j]:
                     img_path = get_product_image(r['room_no'], r['room_type'])
                     if img_path:
-                        st.image(img_path, use_container_width=True)
+                        st.image(img_path, use_column_width=True)
                     else:
                         st.info("📷 暫無圖片")
                     st.markdown(
