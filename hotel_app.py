@@ -528,4 +528,152 @@ elif page == "🛒 購物車":
             total += subtotal
             c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
             with c1:
-                st.write(f"**
+                st.write(f"**{item['name']}**（NT${item['unit_price']:.0f}/單位）")
+            with c2:
+                if st.button("−", key=f"c_minus_{i}", use_container_width=True):
+                    if item["qty"] > 1:
+                        item["qty"] -= 1
+                    else:
+                        cart.pop(i)
+                    st.rerun()
+            with c3:
+                st.markdown(
+                    f"<div style='text-align:center;font-size:1.3rem;font-weight:700;padding-top:6px;'>{item['qty']}</div>",
+                    unsafe_allow_html=True,
+                )
+            with c4:
+                if st.button("+", key=f"c_plus_{i}", use_container_width=True):
+                    item["qty"] += 1
+                    st.rerun()
+            with c5:
+                st.markdown(
+                    f"<div style='text-align:right;color:#e94560;font-weight:700;padding-top:6px;'>NT${subtotal:,.0f}</div>",
+                    unsafe_allow_html=True,
+                )
+            st.markdown(
+                "<hr style='margin:6px 0;border:none;border-top:1px solid #f0f0f0;'>",
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            f"<div class='total-box'>"
+            f"<div class='label'>購物車總計</div>"
+            f"<div class='amount'>NT${total:,.0f}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("➡️ 前往結帳", type="primary", use_container_width=True):
+                st.session_state.page = "🛒 線上下單"
+                st.rerun()
+        with c2:
+            if st.button("🗑️ 清空購物車", use_container_width=True):
+                st.session_state.cart = []
+                st.rerun()
+
+# ---------- 線上下單 ----------
+elif page == "🛒 線上下單":
+    st.markdown('<div class="section-title">線上下單</div>', unsafe_allow_html=True)
+    st.caption("確認購物車內容並填寫聯絡資訊，系統將建立訂單並引導至綠界付款。")
+    cart = st.session_state.cart
+    if not cart:
+        st.warning("購物車是空的。請先至「📝 組合詢價」選擇產品。")
+    else:
+        st.markdown("### 🛒 訂單內容")
+        total = 0
+        for item in cart:
+            subtotal = item["unit_price"] * item["qty"]
+            total += subtotal
+            st.write(f"- {item['name']} × {item['qty']} = NT${subtotal:,.0f}")
+        st.markdown(
+            f"<div class='total-box'>"
+            f"<div class='label'>訂單總計</div>"
+            f"<div class='amount'>NT${total:,.0f}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("---")
+        st.markdown("### 📋 聯絡資訊")
+        with st.form("checkout"):
+            c1, c2 = st.columns(2)
+            with c1:
+                guest_name = st.text_input("聯絡人姓名 *")
+                guest_email = st.text_input("Email *")
+                guest_phone = st.text_input("電話")
+            with c2:
+                company = st.text_input("公司名稱")
+                tax_id = st.text_input("統一編號")
+                delivery = st.date_input("希望交期", value=date.today() + timedelta(days=7))
+            note = st.text_area("備註（規格、包裝、發票等）", height=80)
+            submitted = st.form_submit_button("建立訂單")
+        if submitted:
+            if not guest_name or not guest_email:
+                st.error("聯絡人與 Email 必填")
+            else:
+                first = cart[0]
+                note_full = (
+                    "[購物車明細]\n"
+                    + "\n".join(f"{i['name']} × {i['qty']}" for i in cart)
+                    + (f"\n公司：{company}" if company else "")
+                    + (f"\n統編：{tax_id}" if tax_id else "")
+                    + (f"\n備註：{note}" if note else "")
+                )
+                payload = {
+                    "room_id": first["room_id"],
+                    "guest_name": guest_name,
+                    "guest_email": guest_email,
+                    "guest_phone": guest_phone,
+                    "check_in": date.today().isoformat(),
+                    "check_out": delivery.isoformat(),
+                    "note": note_full,
+                    "quantity": sum(i["qty"] for i in cart),
+                    "total_amount": total,
+                }
+                ok, res = api_create_booking(payload)
+                if ok:
+                    b = res["booking"]
+                    st.success(f"✅ 訂單 #{b['id']} 已建立，金額 NT${b['total_amount']:,.0f}")
+                    st.session_state.cart = []
+                    st.session_state["last_booking_id"] = b["id"]
+                    st.info("請至「💰 帳單與收款」完成付款。")
+                else:
+                    st.error(f"建立失敗：{res.get('error')}")
+
+# ---------- 相片瀏覽 ----------
+elif page == "📷 相片瀏覽":
+    st.markdown('<div class="section-title">本機相片瀏覽</div>', unsafe_allow_html=True)
+    st.caption("請確認路徑指向您的 images 資料夾（預設為 images）。")
+
+    image_dir = st.text_input("圖片資料夾路徑", value="images")
+
+    if image_dir:
+        image_dir = image_dir.strip('"').strip("'")
+
+        if os.path.exists(image_dir) and os.path.isdir(image_dir):
+            valid_extensions = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+            try:
+                img_files = []
+                for root, dirs, files in os.walk(image_dir):
+                    for f in files:
+                        if f.lower().endswith(valid_extensions):
+                            img_files.append((f, os.path.join(root, f)))
+
+                if not img_files:
+                    st.warning(f"在路徑 `{image_dir}` 中找不到任何支援的圖片檔案。")
+                else:
+                    st.success(f"成功找到 {len(img_files)} 張圖片！")
+                    cols_per_row = 3
+                    for i in range(0, len(img_files), cols_per_row):
+                        row_items = img_files[i:i + cols_per_row]
+                        cols = st.columns(cols_per_row)
+                        for idx, (img_name, img_path) in enumerate(row_items):
+                            try:
+                                with cols[idx]:
+                                    st.image(img_path, caption=img_name, use_column_width=True)
+                            except Exception:
+                                cols[idx].error(f"無法載入：{img_name}")
+            except Exception as e:
+                st.error(f"讀取資料夾時發生錯誤：{e}")
+        else:
+            st.error(f"找不到指定的資料夾路徑：`{image_dir}`，請檢查路
