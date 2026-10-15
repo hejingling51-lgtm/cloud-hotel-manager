@@ -194,6 +194,11 @@ def api_get_rooms():
     return process_rooms([])
 
 
+def api_get_bookings():
+    res = _get("/api/bookings", [])
+    return res if isinstance(res, list) else []
+
+
 def api_create_booking(payload):
     try:
         r = requests.post(f"{API_BASE}/api/bookings", json=payload, timeout=8)
@@ -245,7 +250,7 @@ with cols[0]:
 nav_items = [
     ("🏠 首頁", cols[1]), ("🛍️ 產品介紹", cols[2]),
     ("📝 組合詢價", cols[3]), ("🛒 購物車", cols[4]),
-    ("🛒 線上下單", cols[5]), ("📷 相片瀏覽", cols[6]),
+    ("🛒 線上下單", cols[5]), ("💳 綠界 ECPay", cols[6]),
 ]
 for label, col in nav_items:
     with col:
@@ -390,69 +395,3 @@ elif page == "🛒 線上下單":
         st.warning("購物車是空的。請先至「📝 組合詢價」選擇產品。")
     else:
         total = sum(item["unit_price"] * item["qty"] for item in cart)
-        st.markdown(f"### 🛒 訂單總計：NT${total:,.0f}")
-        with st.form("checkout_form"):
-            guest_name = st.text_input("聯絡人姓名 *")
-            guest_email = st.text_input("Email *")
-            guest_phone = st.text_input("電話")
-            company = st.text_input("公司名稱")
-            note = st.text_area("備註")
-            submitted = st.form_submit_button("確認建立訂單")
-        
-        if submitted:
-            if not guest_name or not guest_email:
-                st.error("請填寫姓名與 Email")
-            else:
-                first = cart[0]
-                note_full = "[購物車明細]\n" + "\n".join(f"{i['name']} × {i['qty']}" for i in cart) + (f"\n備註：{note}" if note else "")
-                payload = {
-                    "room_id": first["room_id"],
-                    "guest_name": guest_name,
-                    "guest_email": guest_email,
-                    "guest_phone": guest_phone,
-                    "check_in": date.today().isoformat(),
-                    "check_out": (date.today() + timedelta(days=7)).isoformat(),
-                    "note": note_full,
-                    "quantity": sum(i["qty"] for i in cart),
-                    "total_amount": total,
-                }
-                ok, res = api_create_booking(payload)
-                if ok:
-                    b = res["booking"]
-                    st.success(f"✅ 訂單 #{b['id']} 建立成功！")
-                    st.session_state.cart = []
-                    
-                    # 產生綠界付款連結
-                    ok_pay, pay_res = api_ecpay_create_order(b["id"])
-                    if ok_pay and "redirect_url" in pay_res:
-                        pay_url = f"{API_BASE}{pay_res['redirect_url']}"
-                        st.markdown(
-                            f'<a href="{pay_url}" target="_blank" style="display:inline-block;padding:12px 24px;background:#635BFF;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:10px;">👉 點此前往綠界付款頁面</a>',
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.info("訂單已成立，您可以至後端管理系統或聯絡客服完成付款。")
-                else:
-                    st.error(f"建立訂單失敗：{res.get('error')}")
-
-# ---------- 相片瀏覽 ----------
-elif page == "📷 相片瀏覽":
-    st.markdown('<div class="section-title">本機相片瀏覽</div>', unsafe_allow_html=True)
-    image_dir = "images"
-    if os.path.exists(image_dir):
-        img_files = []
-        for root, dirs, files in os.walk(image_dir):
-            for f in files:
-                if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                    img_files.append((f, os.path.join(root, f)))
-        if img_files:
-            st.success(f"成功找到 {len(img_files)} 張圖片！")
-            for i in range(0, len(img_files), 3):
-                cols3 = st.columns(3)
-                for idx, (img_name, img_path) in enumerate(img_files[i:i+3]):
-                    with cols3[idx]:
-                        st.image(img_path, caption=img_name, use_column_width=True)
-        else:
-            st.warning("找不到圖片。")
-    else:
-        st.error("找不到 images 資料夾。")
