@@ -329,4 +329,139 @@ elif page == "📝 組合詢價":
             subtotal = r["nightly_rate"] * qty
             c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
             with c1:
-                st.write(f"**{r
+                st.write(f"**{r['room_no']} {r['room_type']}** (NT${r['nightly_rate']:.0f}/單位)")
+            with c2:
+                if st.button("−", key=f"minus_{r['id']}"):
+                    if st.session_state[key] > 0:
+                        st.session_state[key] -= 1
+                    st.rerun()
+            with c3:
+                st.write(f"**{qty}**")
+            with c4:
+                if st.button("+", key=f"plus_{r['id']}"):
+                    st.session_state[key] += 1
+                    st.rerun()
+            with c5:
+                st.write(f"NT${subtotal:,.0f}" if qty > 0 else "—")
+
+        selected = [(r, st.session_state[f"qty_{r['id']}"]) for r in rooms if st.session_state[f"qty_{r['id']}"] > 0]
+        if selected:
+            st.markdown("### 🧾 組合試算")
+            total = sum(r["nightly_rate"] * qty for r, qty in selected)
+            for r, qty in selected:
+                st.write(f"- {r['room_no']} {r['room_type']} × {qty} = NT${r['nightly_rate'] * qty:,.0f}")
+            st.markdown(f"**總計：NT${total:,.0f}**")
+            if st.button("✅ 加入購物車", type="primary"):
+                for r, qty in selected:
+                    st.session_state.cart.append({"room_id": r["id"], "name": f"{r['room_no']} {r['room_type']}", "unit_price": r["nightly_rate"], "qty": qty})
+                    st.session_state[f"qty_{r['id']}"] = 0
+                st.success("已加入購物車！")
+                st.rerun()
+
+# ---------- 購物車 ----------
+elif page == "🛒 購物車":
+    st.markdown('<div class="section-title">購物車</div>', unsafe_allow_html=True)
+    cart = st.session_state.cart
+    if not cart:
+        st.info("購物車是空的，請至「📝 組合詢價」選擇產品。")
+    else:
+        total = 0
+        for i, item in enumerate(cart):
+            subtotal = item["unit_price"] * item["qty"]
+            total += subtotal
+            st.write(f"- **{item['name']}** × {item['qty']} = NT${subtotal:,.0f}")
+        st.markdown(f"### 總計：NT${total:,.0f}")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("➡️ 前往結帳（線上下單）", type="primary"):
+                st.session_state.page = "🛒 線上下單"
+                st.rerun()
+        with c2:
+            if st.button("🗑️ 清空購物車"):
+                st.session_state.cart = []
+                st.rerun()
+
+# ---------- 線上下單 ----------
+elif page == "🛒 線上下單":
+    st.markdown('<div class="section-title">線上下單與付款</div>', unsafe_allow_html=True)
+    cart = st.session_state.cart
+    if not cart:
+        st.warning("購物車是空的。請先至「📝 組合詢價」選擇產品。")
+    else:
+        total = sum(item["unit_price"] * item["qty"] for item in cart)
+        st.markdown(f"### 🛒 訂單總計：NT${total:,.0f}")
+        with st.form("checkout_form"):
+            guest_name = st.text_input("聯絡人姓名 *")
+            guest_email = st.text_input("Email *")
+            guest_phone = st.text_input("電話")
+            company = st.text_input("公司名稱")
+            note = st.text_area("備註")
+            submitted = st.form_submit_button("確認建立訂單")
+        
+        if submitted:
+            if not guest_name or not guest_email:
+                st.error("請填寫姓名與 Email")
+            else:
+                note_full = "[購物車明細]\n" + "\n".join(f"{i['name']} × {i['qty']}" for i in cart) + (f"\n備註：{note}" if note else "")
+                
+                check_in_date = date.today()
+                check_out_date = check_in_date + timedelta(days=1)
+                
+                payload = {
+                    "room_id": 1,
+                    "guest_name": guest_name,
+                    "guest_email": guest_email,
+                    "guest_phone": guest_phone,
+                    "check_in": check_in_date.isoformat(),
+                    "check_out": check_out_date.isoformat(),
+                    "note": note_full,
+                    "quantity": sum(i["qty"] for i in cart),
+                    "total_amount": total,
+                }
+                ok, res = api_create_booking(payload)
+                if ok:
+                    b = res["booking"]
+                    st.success(f"✅ 訂單 #{b['id']} 建立成功！")
+                    st.session_state.cart = []
+                    
+                    ok_pay, pay_res = api_ecpay_create_order(b["id"])
+                    if ok_pay and "redirect_url" in pay_res:
+                        pay_url = f"{API_BASE}{pay_res['redirect_url']}"
+                        st.markdown(
+                            f'<a href="{pay_url}" target="_blank" style="display:inline-block;padding:12px 24px;background:#635BFF;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:10px;">👉 點此前往綠界付款頁面</a>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.info("訂單已成立，您可以至「💳 綠界 ECPay」頁面完成付款。")
+                else:
+                    st.error(f"建立失敗：{res.get('error')}")
+
+# ---------- 綠界 ECPay ----------
+elif page == "💳 綠界 ECPay":
+    st.markdown('<div class="section-title">綠界 ECPay 快速付款與設定</div>', unsafe_allow_html=True)
+    cfg = api_ecpay_config()
+    if cfg.get("configured"):
+        st.success("✅ 綠界 ECPay 系統已設定完成")
+    else:
+        st.warning("⚠️ 綠界 ECPay 目前為未設定或測試狀態。")
+        
+    st.markdown("### 💳 待付款訂單列表")
+    bookings = api_get_bookings()
+    pending = [b for b in bookings if b["payment_status"] == "pending" and b["booking_status"] != "cancelled"]
+    if not pending:
+        st.info("目前沒有待付款的訂單。")
+    else:
+        for b in pending:
+            with st.expander(f"訂單 #{b['id']} · {b['guest_name']} · NT${b['total_amount']:,.0f}"):
+                st.write(f"**聯絡人 Email：** {b['guest_email']}")
+                st.write(f"**建立日期：** {b['check_in']}")
+                if st.button(f"💳 產生綠界付款連結 #{b['id']}", key=f"pay_btn_{b['id']}"):
+                    ok, res = api_ecpay_create_order(b["id"])
+                    if ok and "redirect_url" in res:
+                        pay_url = f"{API_BASE}{res['redirect_url']}"
+                        st.markdown(
+                            f'<a href="{pay_url}" target="_blank" style="display:inline-block;padding:12px 24px;background:#635BFF;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:8px;">👉 點此前往綠界付款頁面</a>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.error("無法產生付款連結，請檢查後端綠界參數。")
