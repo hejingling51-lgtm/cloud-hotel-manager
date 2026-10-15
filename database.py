@@ -160,7 +160,7 @@ def create_booking(room_id, guest_name, guest_email, guest_phone,
         except (TypeError, ValueError):
             quantity = 1
 
-    # 【已修改】買襪子不需要檢查房況佔用，直接略過此限制
+    # 【已移除】買襪子不需要檢查房況佔用，直接略過此限制
     # if not is_room_available(room_id, check_in, check_out):
     #     raise ValueError("room_not_available")
 
