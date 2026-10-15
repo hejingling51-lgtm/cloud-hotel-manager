@@ -791,5 +791,64 @@ elif page == "🚚 出貨 / 收貨":
                         if b["booking_status"] == "reserved" and st.button(
                             "✅ 確認出貨", key=f"ship_{b['id']}"
                         ):
-                            ok, _ = api_update_booking(
-                                b["id"], booking
+                            ok, _ = api_update_booking(b["id"], booking_status="checked_in")
+                            if ok:
+                                st.success("已出貨")
+                                st.rerun()
+                    with cols3[1]:
+                        if b["booking_status"] == "checked_in" and st.button(
+                            "📦 確認收貨", key=f"recv_{b['id']}"
+                        ):
+                            ok, _ = api_update_booking(b["id"], booking_status="checked_out")
+                            if ok:
+                                st.success("已收貨")
+                                st.rerun()
+                    with cols3[2]:
+                        if b["booking_status"] == "reserved" and st.button(
+                            "❌ 取消訂單", key=f"cx_{b['id']}"
+                        ):
+                            ok, _ = api_update_booking(b["id"], booking_status="cancelled")
+                            if ok:
+                                st.success("已取消")
+                                st.rerun()
+
+
+# ---------- 帳單與收款 ----------
+elif page == "💰 帳單與收款":
+    if not is_admin:
+        st.error("請先登入管理員帳號（點右上角 🔐 管理）")
+    else:
+        cfg = api_ecpay_config()
+        if not cfg.get("configured"):
+            st.error("⚠️ 綠界 ECPay 尚未設定，請先至「⚙️ 綠界設定」頁面確認。")
+        bookings = api_get_bookings()
+        pending = [b for b in bookings
+                   if b["payment_status"] == "pending"
+                   and b["booking_status"] != "cancelled"]
+        st.markdown("### 💳 待付款訂單")
+        if not pending:
+            st.info("目前沒有待付款訂單")
+        else:
+            for b in pending:
+                with st.expander(
+                    f"#{b['id']} · {b['guest_name']} · NT${b['total_amount']:,.0f}"
+                ):
+                    st.write(f"**產品：** {b['room_id']}")
+                    st.write(f"**交期：** {b['check_out']}")
+                    st.write(f"**數量：** {b['nights']}")
+                    st.write(f"**聯絡人：** {b['guest_email']}")
+                    if b.get("note"):
+                        st.text(b["note"])
+                    if b.get("stripe_session_id"):
+                        st.caption(f"綠界交易編號：`{b['stripe_session_id']}`")
+                    if st.button(
+                        f"💳 產生綠界付款連結 #{b['id']}",
+                        key=f"pay_{b['id']}"
+                    ):
+                        ok, res = api_ecpay_create_order(b["id"])
+                        if ok:
+                            redirect_url = f"{API_BASE}{res['redirect_url']}"
+                            st.session_state[f"ecpay_url_{b['id']}"] = redirect_url
+                            st.success("✅ 付款表單已產生")
+                        else:
+                            st.error
