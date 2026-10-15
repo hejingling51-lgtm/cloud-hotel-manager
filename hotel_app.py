@@ -171,7 +171,7 @@ def process_rooms(rooms):
                 
             r_copy["nightly_rate"] = float(r_copy.get("nightly_rate", 280) or 280)
             r_copy["capacity"] = int(r_copy.get("capacity", 1) or 1)
-            r_copy["status"] = r_copy.get("status", "available")
+            r_copy["status"] = "available"
             r_copy["id"] = r_copy.get("id", num)
         except Exception:
             r_copy["nightly_rate"] = 280.0
@@ -350,7 +350,7 @@ elif page == "📝 組合詢價":
             with c5:
                 st.write(f"NT${subtotal:,.0f}" if qty > 0 else "—")
 
-        selected = [(r, st.session_state[f"qty_{r['id']}"]) for r in rooms if st.session_state[f"qty_{r['id']}"] > 0]
+        selected = [(r, st.session_state[f"qty_{r['id']}"]} for r in rooms if st.session_state[f"qty_{r['id']}"] > 0]
         if selected:
             st.markdown("### 🧾 組合試算")
             total = sum(r["nightly_rate"] * qty for r, qty in selected)
@@ -416,7 +416,7 @@ elif page == "🛒 線上下單":
                     "guest_email": guest_email,
                     "guest_phone": guest_phone,
                     "check_in": date.today().isoformat(),
-                    "check_out": (date.today() + timedelta(days=7)).isoformat(),
+                    "check_out": (date.today() + timedelta(days=365)).isoformat(),
                     "note": note_full,
                     "quantity": sum(i["qty"] for i in cart),
                     "total_amount": total,
@@ -458,7 +458,7 @@ elif page == "💳 綠界 ECPay":
             with st.expander(f"訂單 #{b['id']} · {b['guest_name']} · NT${b['total_amount']:,.0f}"):
                 st.write(f"**聯絡人 Email：** {b['guest_email']}")
                 st.write(f"**建立日期：** {b['check_in']}")
-                if st.button(f"💳 產生綠界付款連結 #{b['id']}", key=f"pay_btn_{b['id']}" ):
+                if st.button(f"💳 產生綠界付款連結 #{b['id']}", key=f"pay_btn_{b['id']}"):
                     ok, res = api_ecpay_create_order(b["id"])
                     if ok and "redirect_url" in res:
                         pay_url = f"{API_BASE}{res['redirect_url']}"
