@@ -94,7 +94,7 @@ class VisitCounter(db.Model):
 
 # ---------- 業務函式 ----------
 def seed_rooms():
-    """若房間表為空，自動建立 24 間套房。"""
+    """若產品表為空，自動建立 24 間產品。"""
     if Room.query.count() > 0:
         return
     for i in range(1, 25):
@@ -142,23 +142,6 @@ def create_booking(room_id, guest_name, guest_email, guest_phone,
                    quantity=None, total_override=None):
     """
     建立訂單。
-
-    參數：
-      room_id        產品 / 房間 ID
-      guest_name     聯絡人姓名
-      guest_email    聯絡人 Email
-      guest_phone    聯絡人電話
-      check_in       下單日
-      check_out      交期（允許等於 check_in）
-      note           備註
-      quantity       數量（若提供，以此為準；否則以日期差計算）
-      total_override 自訂總金額（可選）。基於安全考量，
-                     不得低於「單價 × 數量」的 50%，否則忽略。
-
-    例外：
-      ValueError("room_not_found")    找不到產品
-      ValueError("invalid_dates")     交期早於下單日
-      ValueError("room_not_available") 該區間已有訂單佔用
     """
     room = get_room(room_id)
     if not room:
@@ -177,9 +160,9 @@ def create_booking(room_id, guest_name, guest_email, guest_phone,
         except (TypeError, ValueError):
             quantity = 1
 
-    # 檢查該區間是否已被佔用
-    if not is_room_available(room_id, check_in, check_out):
-        raise ValueError("room_not_available")
+    # 【已修改】買襪子不需要檢查房況佔用，直接略過此限制
+    # if not is_room_available(room_id, check_in, check_out):
+    #     raise ValueError("room_not_available")
 
     # 以資料庫單價為基準計算金額
     base_total = float(room.nightly_rate) * quantity
@@ -217,7 +200,6 @@ def update_booking_status(booking_id, booking_status=None,
         return None
     if booking_status:
         b.booking_status = booking_status
-        # 同步更新房间状态
         room = get_room(b.room_id)
         if room:
             if booking_status == "checked_in":
