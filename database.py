@@ -1,6 +1,6 @@
 # database.py
 import os
-from datetime import datetime
+from datetime import datetime, date
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -20,6 +20,25 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 280,
 }
 db = SQLAlchemy(app)
+
+
+# -------------------------------------------------------------
+# 工具函式
+# -------------------------------------------------------------
+def _parse_date(s, default=None):
+    """把字串轉成 date；支援常見格式。"""
+    if s is None or s == "":
+        return default
+    if isinstance(s, datetime):
+        return s.date()
+    if isinstance(s, date):
+        return s
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(str(s), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"invalid date: {s}")
 
 
 # -------------------------------------------------------------
@@ -52,8 +71,8 @@ class Booking(db.Model):
     guest_name = db.Column(db.String(100), nullable=False)
     guest_email = db.Column(db.String(120), nullable=False)
     guest_phone = db.Column(db.String(30))
-    check_in = db.Column(db.String(20), nullable=False)
-    check_out = db.Column(db.String(20), nullable=False)
+    check_in = db.Column(db.Date, nullable=False)     # ← 對應 socksql-db 的 DATE
+    check_out = db.Column(db.Date, nullable=False)    # ← 對應 socksql-db 的 DATE
     nights = db.Column(db.Integer, default=1)
     total_amount = db.Column(db.Float, nullable=False, default=0)
     payment_status = db.Column(db.String(20), default="pending")
@@ -73,8 +92,8 @@ class Booking(db.Model):
             "guest_name": self.guest_name,
             "guest_email": self.guest_email,
             "guest_phone": self.guest_phone,
-            "check_in": self.check_in,
-            "check_out": self.check_out,
+            "check_in": self.check_in.isoformat() if self.check_in else None,
+            "check_out": self.check_out.isoformat() if self.check_out else None,
             "nights": self.nights,
             "total_amount": self.total_amount,
             "payment_status": self.payment_status,
@@ -109,7 +128,7 @@ class OrderItem(db.Model):
 
 
 # -------------------------------------------------------------
-# 啟動時建表 + 塞預設商品（gunicorn / flask run 都會執行）
+# 啟動時建表 + 塞預設商品
 # -------------------------------------------------------------
 def init_db():
     with app.app_context():
@@ -197,7 +216,6 @@ def create_booking():
         if qty < 1:
             return jsonify({"ok": False, "error": "invalid_quantity"}), 400
 
-        # 若前端沒給單價，就用資料庫的
         if unit_price <= 0:
             unit_price = float(room.nightly_rate)
 
@@ -210,6 +228,13 @@ def create_booking():
             "subtotal": subtotal,
         })
 
+    # --- 日期解析 ---
+    try:
+        ci = _parse_date(data.get("check_in")) or datetime.utcnow().date()
+        co = _parse_date(data.get("check_out")) or ci
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
     # --- 建立 Booking + OrderItem ---
     try:
         first_room_id = validated_items[0]["room_id"]
@@ -219,8 +244,8 @@ def create_booking():
             guest_name=guest_name,
             guest_email=guest_email,
             guest_phone=(data.get("guest_phone") or "").strip(),
-            check_in=data.get("check_in") or datetime.utcnow().strftime("%Y-%m-%d"),
-            check_out=data.get("check_out") or datetime.utcnow().strftime("%Y-%m-%d"),
+            check_in=ci,
+            check_out=co,
             nights=int(data.get("nights", 1) or 1),
             total_amount=computed_total,
             note=(data.get("note") or "").strip(),
@@ -279,7 +304,7 @@ def update_booking_status(bid):
 
 
 # -------------------------------------------------------------
-# 綠界 ECPay（先 mock，之後要接真綠界再把簽章搬過來）
+# 綠界 ECPay（先 mock）
 # -------------------------------------------------------------
 @app.route("/api/ecpay/config", methods=["GET"])
 def ecpay_config():
