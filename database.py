@@ -45,7 +45,7 @@ def _parse_date(s, default=None):
 # Models（襪子電商語意）
 # -------------------------------------------------------------
 class Product(db.Model):
-    """襪子商品（原 Room）"""
+    """襪子商品"""
     __tablename__ = "products"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -67,7 +67,7 @@ class Product(db.Model):
 
 
 class Order(db.Model):
-    """訂單（原 Booking）"""
+    """訂單"""
     __tablename__ = "orders"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -130,21 +130,27 @@ class OrderItem(db.Model):
 
 
 # -------------------------------------------------------------
-# 啟動時建表 + 塞預設商品
+# 啟動時建表 + 塞 20 筆預設商品
 # -------------------------------------------------------------
 def init_db():
     with app.app_context():
         db.create_all()
         if Product.query.count() == 0:
-            defaults = [
-                ("R0001", "成人襪", "1", 280.0),
-                ("R0002", "成人襪", "1", 280.0),
-                ("R0013", "兒童襪", "1", 250.0),
-                ("R0020", "兒童襪", "1", 250.0),
-            ]
-            for no, t, spec, price in defaults:
+            for i in range(1, 21):
+                product_no = f"R{i:04d}"
+                if i <= 12:
+                    product_type = "成人襪"
+                    price = 280.0
+                else:
+                    product_type = "兒童襪"
+                    price = 250.0
                 db.session.add(
-                    Product(product_no=no, product_type=t, spec=spec, unit_price=price)
+                    Product(
+                        product_no=product_no,
+                        product_type=product_type,
+                        spec="1",
+                        unit_price=price,
+                    )
                 )
             db.session.commit()
 
