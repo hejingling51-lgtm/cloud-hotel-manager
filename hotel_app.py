@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import requests
 import streamlit as st
 
-API_BASE = os.environ.get("API_BASE", "http://127.0.0.1:5000")
+API_BASE = os.environ.get("API_BASE", "https://cloud-hotel-manager-1.onrender.com")
 
 st.set_page_config(
     page_title="Gabriel-JL 雲端",
@@ -498,4 +498,66 @@ elif page == "🛒 線上下單":
                     if r.status_code == 201:
                         res = r.json()
                         o = res.get("order", {})
-                        st
+                        st.success(f"✅ 訂單 #{o.get('id')} 建立成功！")
+                        st.session_state.cart = []
+
+                        ok_pay, pay_res = api_ecpay_create_order(o.get('id'))
+                        if ok_pay and "redirect_url" in pay_res:
+                            pay_url = f"{API_BASE}{pay_res['redirect_url']}"
+                            st.markdown(
+                                f'<a href="{pay_url}" target="_blank" '
+                                f'style="display:inline-block;padding:12px 24px;'
+                                f'background:#635BFF;color:#fff;border-radius:8px;'
+                                f'text-decoration:none;font-weight:bold;margin-top:10px;">'
+                                f'👉 點此前往綠界付款頁面</a>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.info("訂單已成立，您可以至「💳 綠界 ECPay」頁面完成付款。")
+                    else:
+                        st.error(f"建立失敗：{r.text}")
+                except Exception as e:
+                    st.error(f"連線錯誤：{str(e)}")
+
+# ---------- 綠界 ECPay ----------
+elif page == "💳 綠界 ECPay":
+    st.markdown(
+        '<div class="section-title">綠界 ECPay 快速付款與設定</div>',
+        unsafe_allow_html=True,
+    )
+    cfg = api_ecpay_config()
+    if cfg.get("configured"):
+        st.success("✅ 綠界 ECPay 系統已設定完成")
+    else:
+        st.warning("⚠️ 綠界 ECPay 目前為未設定或測試狀態。")
+
+    st.markdown("### 💳 待付款訂單列表")
+    orders = api_get_orders()
+    pending = [o for o in orders if o.get("payment_status") == "pending"]
+    if not pending:
+        st.info("目前沒有待付款的訂單。")
+    else:
+        for o in pending:
+            with st.expander(
+                f"訂單 #{o['id']} · {o['customer_name']} · NT${o['total_amount']:,.0f}"
+            ):
+                st.write("**訂單明細：**")
+                for item in o.get("items", []):
+                    st.write(
+                        f"- {item['product_no']} {item['product_type']} × "
+                        f"{item['quantity']} (單價 NT${item['unit_price']})"
+                    )
+                if st.button(f"💳 產生綠界付款連結 #{o['id']}", key=f"pay_btn_{o['id']}"):
+                    ok, res = api_ecpay_create_order(o["id"])
+                    if ok and "redirect_url" in res:
+                        pay_url = f"{API_BASE}{res['redirect_url']}"
+                        st.markdown(
+                            f'<a href="{pay_url}" target="_blank" '
+                            f'style="display:inline-block;padding:12px 24px;'
+                            f'background:#635BFF;color:#fff;border-radius:8px;'
+                            f'text-decoration:none;font-weight:bold;margin-top:8px;">'
+                            f'👉 點此前往綠界付款頁面</a>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.error("無法產生付款連結，請檢查後端綠界參數。")
