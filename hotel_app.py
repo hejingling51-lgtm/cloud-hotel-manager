@@ -1,7 +1,6 @@
 # hotel_app.py
 import os
 from datetime import date, timedelta
-import pandas as pd
 import requests
 import streamlit as st
 
@@ -15,7 +14,7 @@ st.set_page_config(
 )
 
 # ============================================================
-#  CSS 樣式設定 (包含海洋動畫與鴨子)
+#  CSS 樣式設定 (海洋動畫 + 三隻鴨子)
 # ============================================================
 st.markdown("""
 <style>
@@ -59,6 +58,7 @@ st.markdown("""
     100% { transform: translateX(20px); }
 }
 
+/* 🦆 三隻鴨子 */
 .hero .ducks {
     position: absolute;
     right: 20px;
@@ -115,6 +115,7 @@ def _get(path, default=None, timeout=8):
         pass
     return default
 
+
 def _post(path, payload=None, timeout=8):
     try:
         r = requests.post(f"{API_BASE}{path}", json=payload or {}, timeout=timeout)
@@ -122,69 +123,77 @@ def _post(path, payload=None, timeout=8):
     except Exception as e:
         return False, {"error": str(e)}
 
-def process_rooms(rooms):
-    if not isinstance(rooms, list) or len(rooms) == 0:
-        rooms = [
-            {"id": 1, "room_no": "R0001", "room_type": "成人襪", "capacity": 1, "nightly_rate": 280, "status": "available"},
-            {"id": 2, "room_no": "R0002", "room_type": "成人襪", "capacity": 1, "nightly_rate": 280, "status": "available"},
-            {"id": 13, "room_no": "R0013", "room_type": "兒童襪", "capacity": 1, "nightly_rate": 250, "status": "available"},
-            {"id": 20, "room_no": "R0020", "room_type": "兒童襪", "capacity": 1, "nightly_rate": 250, "status": "available"},
+
+def process_products(products):
+    """整理商品資料，若空則回傳預設 4 筆。"""
+    if not isinstance(products, list) or len(products) == 0:
+        products = [
+            {"id": 1,  "product_no": "R0001", "product_type": "成人襪", "spec": "1", "unit_price": 280, "stock_status": "available"},
+            {"id": 2,  "product_no": "R0002", "product_type": "成人襪", "spec": "1", "unit_price": 280, "stock_status": "available"},
+            {"id": 13, "product_no": "R0013", "product_type": "兒童襪", "spec": "1", "unit_price": 250, "stock_status": "available"},
+            {"id": 20, "product_no": "R0020", "product_type": "兒童襪", "spec": "1", "unit_price": 250, "stock_status": "available"},
         ]
     processed = []
-    for r in rooms:
-        if not isinstance(r, dict):
+    for p in products:
+        if not isinstance(p, dict):
             continue
-        r_copy = r.copy()
+        p_copy = p.copy()
         try:
-            room_no_str = str(r_copy.get("room_no", "R0001"))
-            digits = ''.join(filter(str.isdigit, room_no_str))
+            product_no_str = str(p_copy.get("product_no", "R0001"))
+            digits = ''.join(filter(str.isdigit, product_no_str))
             num = int(digits) if digits else 1
-            r_copy["room_no"] = f"R{num:04d}"
-            
+            p_copy["product_no"] = f"R{num:04d}"
+
             if 13 <= num <= 20:
-                r_copy["room_type"] = "兒童襪"
+                p_copy["product_type"] = "兒童襪"
             else:
-                r_copy["room_type"] = r_copy.get("room_type", "成人襪")
-                
-            r_copy["nightly_rate"] = float(r_copy.get("nightly_rate", 280) or 280)
-            r_copy["capacity"] = int(r_copy.get("capacity", 1) or 1)
-            r_copy["status"] = "available"
-            r_copy["id"] = r_copy.get("id", num)
+                p_copy["product_type"] = p_copy.get("product_type", "成人襪")
+
+            p_copy["unit_price"] = float(p_copy.get("unit_price", 280) or 280)
+            p_copy["spec"] = str(p_copy.get("spec", "1") or "1")
+            p_copy["stock_status"] = "available"
+            p_copy["id"] = p_copy.get("id", num)
         except Exception:
-            r_copy["nightly_rate"] = 280.0
-            r_copy["capacity"] = 1
-            r_copy["room_type"] = "成人襪"
-            r_copy["status"] = "available"
-        processed.append(r_copy)
+            p_copy["unit_price"] = 280.0
+            p_copy["spec"] = "1"
+            p_copy["product_type"] = "成人襪"
+            p_copy["stock_status"] = "available"
+        processed.append(p_copy)
     return processed
 
-def api_get_rooms():
+
+def api_get_products():
     try:
-        r = requests.get(f"{API_BASE}/api/rooms", timeout=3)
+        r = requests.get(f"{API_BASE}/api/products", timeout=3)
         if r.ok:
             data = r.json()
             if isinstance(data, list) and len(data) > 0:
-                return process_rooms(data)
+                return process_products(data)
     except Exception:
         pass
-    return process_rooms([])
+    return process_products([])
 
-def api_get_bookings():
-    res = _get("/api/bookings", [])
+
+def api_get_orders():
+    res = _get("/api/orders", [])
     return res if isinstance(res, list) else []
+
 
 def api_ecpay_config():
     return _get("/api/ecpay/config", {"configured": False}, timeout=5)
 
-def api_ecpay_create_order(booking_id):
-    return _post("/api/ecpay/create-order", {"booking_id": booking_id}, timeout=10)
 
-def get_product_image(room_no, room_type="成人襪"):
+def api_ecpay_create_order(order_id):
+    return _post("/api/ecpay/create-order", {"order_id": order_id}, timeout=10)
+
+
+def get_product_image(product_no, product_type="成人襪"):
+    """回傳商品圖片路徑（若找不到則回傳 None）。"""
     try:
-        clean_no = str(room_no).upper().strip()
+        clean_no = str(product_no).upper().strip()
         if not clean_no.startswith("R"):
             clean_no = f"R{clean_no}"
-        folder_name = "成人襪" if "成人" in str(room_type) else "兒童襪"
+        folder_name = "成人襪" if "成人" in str(product_type) else "兒童襪"
         img_path = os.path.join("images", folder_name, f"{clean_no}.jpg")
         if os.path.exists(img_path):
             return img_path
@@ -194,6 +203,7 @@ def get_product_image(room_no, room_type="成人襪"):
     except Exception:
         pass
     return None
+
 
 # ============================================================
 #  導航與狀態
@@ -205,7 +215,11 @@ if "cart" not in st.session_state:
 
 cols = st.columns([1.5, 1, 1, 1, 1, 1, 1, 1])
 with cols[0]:
-    st.markdown("<div style='font-weight:700;font-size:1.1rem;color:#1a1a2e;padding-top:6px;'>🏢 Gabriel-JL 雲端</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='font-weight:700;font-size:1.1rem;color:#1a1a2e;padding-top:6px;'>"
+        "🏢 Gabriel-JL 雲端</div>",
+        unsafe_allow_html=True,
+    )
 
 nav_items = [
     ("🏠 首頁", cols[1]), ("🛍️ 產品介紹", cols[2]),
@@ -222,24 +236,30 @@ page = st.session_state.page
 
 # ---------- 首頁 ----------
 if page == "🏠 首頁":
-    st.markdown("<div class='hero'><div class='ducks'><span>🦆</span><span>🦆</span><span>🦆</span></div></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='hero'>"
+        "<div class='ducks'><span>🦆</span><span>🦆</span><span>🦆</span></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown('<div class="section-title">熱門產品</div>', unsafe_allow_html=True)
-    rooms = api_get_rooms()
-    if rooms:
-        for i in range(0, min(len(rooms), 10), 4):
+    products = api_get_products()
+    if products:
+        for i in range(0, min(len(products), 10), 4):
             cols4 = st.columns(4)
-            for j, r in enumerate(rooms[i:i+4]):
+            for j, p in enumerate(products[i:i + 4]):
                 with cols4[j]:
-                    img_path = get_product_image(r['room_no'], r['room_type'])
+                    img_path = get_product_image(p['product_no'], p['product_type'])
                     if img_path:
-                        st.image(img_path, use_column_width=True)
+                        st.image(img_path, use_container_width=True)
                     else:
                         st.info("📷 暫無圖片")
                     st.markdown(
-                        f"<div class='prod-card' style='border-top:none; border-top-left-radius:0; border-top-right-radius:0;'>"
-                        f"<h4>{r['room_no']}</h4>"
-                        f"<p class='spec'>{r['room_type']} · 規格 {r['capacity']}</p>"
-                        f"<p class='price'>NT${r['nightly_rate']:.0f}<span>/ 單位</span></p>"
+                        f"<div class='prod-card' style='border-top:none; "
+                        f"border-top-left-radius:0; border-top-right-radius:0;'>"
+                        f"<h4>{p['product_no']}</h4>"
+                        f"<p class='spec'>{p['product_type']} · 規格 {p['spec']}</p>"
+                        f"<p class='price'>NT${p['unit_price']:.0f}<span>/ 單位</span></p>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
@@ -247,27 +267,28 @@ if page == "🏠 首頁":
 # ---------- 產品介紹 ----------
 elif page == "🛍️ 產品介紹":
     st.markdown('<div class="section-title">產品介紹</div>', unsafe_allow_html=True)
-    rooms = api_get_rooms()
-    if rooms:
+    products = api_get_products()
+    if products:
         types = {}
-        for r in rooms:
-            types.setdefault(r["room_type"], []).append(r)
+        for p in products:
+            types.setdefault(p["product_type"], []).append(p)
         for ptype, items in types.items():
             st.markdown(f"#### {ptype}")
             for i in range(0, len(items), 3):
                 cols3 = st.columns(3)
                 for j, p in enumerate(items[i:i + 3]):
                     with cols3[j]:
-                        img_path = get_product_image(p['room_no'], p['room_type'])
+                        img_path = get_product_image(p['product_no'], p['product_type'])
                         if img_path:
-                            st.image(img_path, use_column_width=True)
+                            st.image(img_path, use_container_width=True)
                         else:
                             st.info("📷 暫無圖片")
                         st.markdown(
-                            f"<div class='prod-card' style='border-top:none; border-top-left-radius:0; border-top-right-radius:0;'>"
-                            f"<h4>{p['room_no']}</h4>"
-                            f"<p class='spec'>{p['room_type']} · 規格 {p['capacity']}</p>"
-                            f"<p class='price'>NT${p['nightly_rate']:.0f}<span>/ 單位</span></p>"
+                            f"<div class='prod-card' style='border-top:none; "
+                            f"border-top-left-radius:0; border-top-right-radius:0;'>"
+                            f"<h4>{p['product_no']}</h4>"
+                            f"<p class='spec'>{p['product_type']} · 規格 {p['spec']}</p>"
+                            f"<p class='price'>NT${p['unit_price']:.0f}<span>/ 單位</span></p>"
                             f"</div>",
                             unsafe_allow_html=True,
                         )
@@ -276,51 +297,60 @@ elif page == "🛍️ 產品介紹":
 elif page == "📝 組合詢價":
     st.markdown('<div class="section-title">組合詢價</div>', unsafe_allow_html=True)
     st.caption("點選 − / + 調整數量，系統即時試算總價。價格滿意即可加入購物車。")
-    rooms = api_get_rooms()
-    if rooms:
-        for r in rooms:
-            key = f"qty_{r['id']}"
+    products = api_get_products()
+    if products:
+        for p in products:
+            key = f"qty_{p['id']}"
             if key not in st.session_state:
                 st.session_state[key] = 0
 
         st.markdown("### 🛍️ 選擇產品與數量")
-        for r in rooms:
-            key = f"qty_{r['id']}"
+        for p in products:
+            key = f"qty_{p['id']}"
             qty = st.session_state[key]
-            subtotal = r["nightly_rate"] * qty
+            subtotal = p["unit_price"] * qty
             c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
             with c1:
-                st.write(f"**{r['room_no']} {r['room_type']}** (NT${r['nightly_rate']:.0f}/單位)")
+                st.write(
+                    f"**{p['product_no']} {p['product_type']}** "
+                    f"(NT${p['unit_price']:.0f}/單位)"
+                )
             with c2:
-                if st.button("−", key=f"minus_{r['id']}"):
+                if st.button("−", key=f"minus_{p['id']}"):
                     if st.session_state[key] > 0:
                         st.session_state[key] -= 1
                     st.rerun()
             with c3:
                 st.write(f"**{qty}**")
             with c4:
-                if st.button("+", key=f"plus_{r['id']}"):
+                if st.button("+", key=f"plus_{p['id']}"):
                     st.session_state[key] += 1
                     st.rerun()
             with c5:
                 st.write(f"NT${subtotal:,.0f}" if qty > 0 else "—")
 
-        selected = [(r, st.session_state[f"qty_{r['id']}"]) for r in rooms if st.session_state[f"qty_{r['id']}"] > 0]
+        selected = [
+            (p, st.session_state[f"qty_{p['id']}"])
+            for p in products if st.session_state[f"qty_{p['id']}"] > 0
+        ]
         if selected:
             st.markdown("### 🧾 組合試算")
-            total = sum(r["nightly_rate"] * qty for r, qty in selected)
-            for r, qty in selected:
-                st.write(f"- {r['room_no']} {r['room_type']} × {qty} = NT${r['nightly_rate'] * qty:,.0f}")
+            total = sum(p["unit_price"] * qty for p, qty in selected)
+            for p, qty in selected:
+                st.write(
+                    f"- {p['product_no']} {p['product_type']} × {qty} "
+                    f"= NT${p['unit_price'] * qty:,.0f}"
+                )
             st.markdown(f"**總計：NT${total:,.0f}**")
             if st.button("✅ 加入購物車", type="primary"):
-                for r, qty in selected:
+                for p, qty in selected:
                     st.session_state.cart.append({
-                        "room_id": r["id"],
-                        "name": f"{r['room_no']} {r['room_type']}",
-                        "unit_price": r["nightly_rate"],
-                        "qty": qty
+                        "product_id": p["id"],
+                        "name": f"{p['product_no']} {p['product_type']}",
+                        "unit_price": p["unit_price"],
+                        "qty": qty,
                     })
-                    st.session_state[f"qty_{r['id']}"] = 0
+                    st.session_state[f"qty_{p['id']}"] = 0
                 st.success("已加入購物車！")
                 st.rerun()
 
@@ -332,7 +362,7 @@ elif page == "🛒 購物車":
         st.info("購物車是空的，請至「📝 組合詢價」選擇產品。")
     else:
         total = 0
-        for i, item in enumerate(cart):
+        for item in cart:
             subtotal = item["unit_price"] * item["qty"]
             total += subtotal
             st.write(f"- **{item['name']}** × {item['qty']} = NT${subtotal:,.0f}")
@@ -356,43 +386,54 @@ elif page == "🛒 線上下單":
     else:
         total = sum(item["unit_price"] * item["qty"] for item in cart)
         st.markdown(f"### 🛒 訂單總計：NT${total:,.0f}")
+
         with st.form("checkout_form"):
-            guest_name = st.text_input("聯絡人姓名 *")
-            guest_email = st.text_input("Email *")
-            guest_phone = st.text_input("電話")
+            customer_name = st.text_input("聯絡人姓名 *")
+            customer_email = st.text_input("Email *")
+            customer_phone = st.text_input("電話")
             note = st.text_area("備註")
             submitted = st.form_submit_button("確認建立訂單")
-        
+
         if submitted:
-            if not guest_name or not guest_email:
+            if not customer_name or not customer_email:
                 st.error("請填寫姓名與 Email")
             else:
                 payload = {
-                    "guest_name": guest_name,
-                    "guest_email": guest_email,
-                    "guest_phone": guest_phone,
-                    "check_in": date.today().isoformat(),
-                    "check_out": (date.today() + timedelta(days=1)).isoformat(),
+                    "customer_name": customer_name,
+                    "customer_email": customer_email,
+                    "customer_phone": customer_phone,
+                    "order_date": date.today().isoformat(),
+                    "delivery_date": (date.today() + timedelta(days=1)).isoformat(),
                     "total_amount": total,
-                    "quantity": sum(i["qty"] for i in cart),
                     "note": note,
-                    "items": cart  # 傳送多筆明細陣列
+                    "items": [
+                        {
+                            "product_id": i["product_id"],
+                            "unit_price": i["unit_price"],
+                            "qty": i["qty"],
+                        }
+                        for i in cart
+                    ],
                 }
-                
+
                 try:
-                    r = requests.post(f"{API_BASE}/api/bookings", json=payload, timeout=8)
+                    r = requests.post(f"{API_BASE}/api/orders", json=payload, timeout=8)
                     if r.status_code == 201:
                         res = r.json()
-                        b = res.get("booking", {})
-                        st.success(f"✅ 訂單 #{b.get('id')} 建立成功！")
+                        o = res.get("order", {})
+                        st.success(f"✅ 訂單 #{o.get('id')} 建立成功！")
                         st.session_state.cart = []
-                        
-                        ok_pay, pay_res = api_ecpay_create_order(b.get('id'))
+
+                        ok_pay, pay_res = api_ecpay_create_order(o.get('id'))
                         if ok_pay and "redirect_url" in pay_res:
                             pay_url = f"{API_BASE}{pay_res['redirect_url']}"
                             st.markdown(
-                                f'<a href="{pay_url}" target="_blank" style="display:inline-block;padding:12px 24px;background:#635BFF;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:10px;">👉 點此前往綠界付款頁面</a>',
-                                unsafe_allow_html=True
+                                f'<a href="{pay_url}" target="_blank" '
+                                f'style="display:inline-block;padding:12px 24px;'
+                                f'background:#635BFF;color:#fff;border-radius:8px;'
+                                f'text-decoration:none;font-weight:bold;margin-top:10px;">'
+                                f'👉 點此前往綠界付款頁面</a>',
+                                unsafe_allow_html=True,
                             )
                         else:
                             st.info("訂單已成立，您可以至「💳 綠界 ECPay」頁面完成付款。")
@@ -403,31 +444,43 @@ elif page == "🛒 線上下單":
 
 # ---------- 綠界 ECPay ----------
 elif page == "💳 綠界 ECPay":
-    st.markdown('<div class="section-title">綠界 ECPay 快速付款與設定</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">綠界 ECPay 快速付款與設定</div>',
+        unsafe_allow_html=True,
+    )
     cfg = api_ecpay_config()
     if cfg.get("configured"):
         st.success("✅ 綠界 ECPay 系統已設定完成")
     else:
         st.warning("⚠️ 綠界 ECPay 目前為未設定或測試狀態。")
-        
+
     st.markdown("### 💳 待付款訂單列表")
-    bookings = api_get_bookings()
-    pending = [b for b in bookings if b["payment_status"] == "pending"]
+    orders = api_get_orders()
+    pending = [o for o in orders if o.get("payment_status") == "pending"]
     if not pending:
         st.info("目前沒有待付款的訂單。")
     else:
-        for b in pending:
-            with st.expander(f"訂單 #{b['id']} · {b['guest_name']} · NT${b['total_amount']:,.0f}"):
-                st.write(f"**訂單明細：**")
-                for item in b.get("items", []):
-                    st.write(f"- {item['room_no']} {item['room_type']} × {item['quantity']} (單價 NT${item['unit_price']})")
-                if st.button(f"💳 產生綠界付款連結 #{b['id']}", key=f"pay_btn_{b['id']}"):
-                    ok, res = api_ecpay_create_order(b["id"])
+        for o in pending:
+            with st.expander(
+                f"訂單 #{o['id']} · {o['customer_name']} · NT${o['total_amount']:,.0f}"
+            ):
+                st.write("**訂單明細：**")
+                for item in o.get("items", []):
+                    st.write(
+                        f"- {item['product_no']} {item['product_type']} × "
+                        f"{item['quantity']} (單價 NT${item['unit_price']})"
+                    )
+                if st.button(f"💳 產生綠界付款連結 #{o['id']}", key=f"pay_btn_{o['id']}"):
+                    ok, res = api_ecpay_create_order(o["id"])
                     if ok and "redirect_url" in res:
                         pay_url = f"{API_BASE}{res['redirect_url']}"
                         st.markdown(
-                            f'<a href="{pay_url}" target="_blank" style="display:inline-block;padding:12px 24px;background:#635BFF;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:8px;">👉 點此前往綠界付款頁面</a>',
-                            unsafe_allow_html=True
+                            f'<a href="{pay_url}" target="_blank" '
+                            f'style="display:inline-block;padding:12px 24px;'
+                            f'background:#635BFF;color:#fff;border-radius:8px;'
+                            f'text-decoration:none;font-weight:bold;margin-top:8px;">'
+                            f'👉 點此前往綠界付款頁面</a>',
+                            unsafe_allow_html=True,
                         )
                     else:
                         st.error("無法產生付款連結，請檢查後端綠界參數。")

@@ -42,62 +42,62 @@ def _parse_date(s, default=None):
 
 
 # -------------------------------------------------------------
-# Models
+# Models（襪子電商語意）
 # -------------------------------------------------------------
-class Room(db.Model):
-    __tablename__ = "rooms"
+class Product(db.Model):
+    """襪子商品（原 Room）"""
+    __tablename__ = "products"
+
     id = db.Column(db.Integer, primary_key=True)
-    room_no = db.Column(db.String(20), unique=True, nullable=False)
-    room_type = db.Column(db.String(50), nullable=False)
-    capacity = db.Column(db.Integer, default=1)
-    nightly_rate = db.Column(db.Float, nullable=False, default=280.0)
-    status = db.Column(db.String(20), default="available")
+    product_no = db.Column(db.String(20), unique=True, nullable=False)
+    product_type = db.Column(db.String(50), nullable=False)
+    spec = db.Column(db.String(50), default="")
+    unit_price = db.Column(db.Float, nullable=False, default=280.0)
+    stock_status = db.Column(db.String(20), default="available")
 
     def to_dict(self):
         return {
             "id": self.id,
-            "room_no": self.room_no,
-            "room_type": self.room_type,
-            "capacity": self.capacity,
-            "nightly_rate": self.nightly_rate,
-            "status": self.status,
+            "product_no": self.product_no,
+            "product_type": self.product_type,
+            "spec": self.spec,
+            "unit_price": self.unit_price,
+            "stock_status": self.stock_status,
         }
 
 
-class Booking(db.Model):
-    __tablename__ = "bookings"
+class Order(db.Model):
+    """訂單（原 Booking）"""
+    __tablename__ = "orders"
+
     id = db.Column(db.Integer, primary_key=True)
-    room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=False)
-    guest_name = db.Column(db.String(100), nullable=False)
-    guest_email = db.Column(db.String(120), nullable=False)
-    guest_phone = db.Column(db.String(30))
-    check_in = db.Column(db.Date, nullable=False)     # ← 對應 socksql-db 的 DATE
-    check_out = db.Column(db.Date, nullable=False)    # ← 對應 socksql-db 的 DATE
-    nights = db.Column(db.Integer, default=1)
+    customer_name = db.Column(db.String(100), nullable=False)
+    customer_email = db.Column(db.String(120), nullable=False)
+    customer_phone = db.Column(db.String(30))
+    order_date = db.Column(db.Date, nullable=False)
+    delivery_date = db.Column(db.Date, nullable=False)
     total_amount = db.Column(db.Float, nullable=False, default=0)
     payment_status = db.Column(db.String(20), default="pending")
-    booking_status = db.Column(db.String(20), default="reserved")
+    order_status = db.Column(db.String(20), default="reserved")
     note = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     items = db.relationship(
-        "OrderItem", backref="booking", lazy=True,
+        "OrderItem", backref="order", lazy=True,
         cascade="all, delete-orphan",
     )
 
     def to_dict(self):
         return {
             "id": self.id,
-            "room_id": self.room_id,
-            "guest_name": self.guest_name,
-            "guest_email": self.guest_email,
-            "guest_phone": self.guest_phone,
-            "check_in": self.check_in.isoformat() if self.check_in else None,
-            "check_out": self.check_out.isoformat() if self.check_out else None,
-            "nights": self.nights,
+            "customer_name": self.customer_name,
+            "customer_email": self.customer_email,
+            "customer_phone": self.customer_phone,
+            "order_date": self.order_date.isoformat() if self.order_date else None,
+            "delivery_date": self.delivery_date.isoformat() if self.delivery_date else None,
             "total_amount": self.total_amount,
             "payment_status": self.payment_status,
-            "booking_status": self.booking_status,
+            "order_status": self.order_status,
             "note": self.note,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "items": [item.to_dict() for item in self.items],
@@ -105,22 +105,24 @@ class Booking(db.Model):
 
 
 class OrderItem(db.Model):
+    """訂單明細"""
     __tablename__ = "order_items"
+
     id = db.Column(db.Integer, primary_key=True)
-    booking_id = db.Column(db.Integer, db.ForeignKey("bookings.id"), nullable=False)
-    room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     unit_price = db.Column(db.Float, nullable=False)
     subtotal = db.Column(db.Float, nullable=False)
 
-    room = db.relationship("Room", lazy=True)
+    product = db.relationship("Product", lazy=True)
 
     def to_dict(self):
         return {
             "id": self.id,
-            "room_id": self.room_id,
-            "room_no": self.room.room_no if self.room else "",
-            "room_type": self.room.room_type if self.room else "",
+            "product_id": self.product_id,
+            "product_no": self.product.product_no if self.product else "",
+            "product_type": self.product.product_type if self.product else "",
             "quantity": self.quantity,
             "unit_price": self.unit_price,
             "subtotal": self.subtotal,
@@ -133,16 +135,16 @@ class OrderItem(db.Model):
 def init_db():
     with app.app_context():
         db.create_all()
-        if Room.query.count() == 0:
+        if Product.query.count() == 0:
             defaults = [
-                ("R0001", "成人襪", 1, 280.0),
-                ("R0002", "成人襪", 1, 280.0),
-                ("R0013", "兒童襪", 1, 250.0),
-                ("R0020", "兒童襪", 1, 250.0),
+                ("R0001", "成人襪", "1", 280.0),
+                ("R0002", "成人襪", "1", 280.0),
+                ("R0013", "兒童襪", "1", 250.0),
+                ("R0020", "兒童襪", "1", 250.0),
             ]
-            for no, t, cap, price in defaults:
+            for no, t, spec, price in defaults:
                 db.session.add(
-                    Room(room_no=no, room_type=t, capacity=cap, nightly_rate=price)
+                    Product(product_no=no, product_type=t, spec=spec, unit_price=price)
                 )
             db.session.commit()
 
@@ -158,105 +160,89 @@ def health():
     return jsonify({"ok": True, "service": "sock-shop"})
 
 
-@app.route("/api/rooms", methods=["GET"])
-def get_rooms():
-    rooms = Room.query.order_by(Room.room_no).all()
-    return jsonify([r.to_dict() for r in rooms])
+@app.route("/api/products", methods=["GET"])
+def get_products():
+    products = Product.query.order_by(Product.product_no).all()
+    return jsonify([p.to_dict() for p in products])
 
 
-@app.route("/api/bookings", methods=["GET"])
-def get_bookings():
+@app.route("/api/orders", methods=["GET"])
+def get_orders():
     limit = request.args.get("limit", 200, type=int)
     limit = max(1, min(limit or 200, 500))
-    bookings = (
-        Booking.query.order_by(Booking.created_at.desc()).limit(limit).all()
-    )
-    return jsonify([b.to_dict() for b in bookings])
+    orders = Order.query.order_by(Order.created_at.desc()).limit(limit).all()
+    return jsonify([o.to_dict() for o in orders])
 
 
-@app.route("/api/bookings", methods=["POST"])
-def create_booking():
+@app.route("/api/orders", methods=["POST"])
+def create_order():
     data = request.get_json(silent=True) or {}
 
-    # --- 必要欄位 ---
-    guest_name = (data.get("guest_name") or "").strip()
-    guest_email = (data.get("guest_email") or "").strip()
-    if not guest_name or not guest_email:
-        return jsonify({"ok": False, "error": "missing_guest_info"}), 400
+    customer_name = (data.get("customer_name") or "").strip()
+    customer_email = (data.get("customer_email") or "").strip()
+    if not customer_name or not customer_email:
+        return jsonify({"ok": False, "error": "missing_customer_info"}), 400
 
-    # --- items 解析（相容舊版單一 room_id）---
     cart_items = data.get("items") or []
-    if not cart_items and "room_id" in data:
+    if not cart_items and "product_id" in data:
         cart_items = [{
-            "room_id": data.get("room_id"),
+            "product_id": data.get("product_id"),
             "unit_price": data.get("total_amount", 0),
             "qty": data.get("quantity", 1),
         }]
     if not cart_items:
         return jsonify({"ok": False, "error": "empty_items"}), 400
 
-    # --- 檢查每個 room_id 都存在，並計算總金額 ---
     computed_total = 0.0
     validated_items = []
     for item in cart_items:
         try:
-            room_id = int(item.get("room_id"))
+            product_id = int(item.get("product_id"))
             qty = int(item.get("qty", item.get("quantity", 1)))
             unit_price = float(item.get("unit_price", 0))
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "invalid_item_format"}), 400
 
-        room = db.session.get(Room, room_id)
-        if not room:
-            return jsonify({
-                "ok": False,
-                "error": f"room_id {room_id} not found",
-            }), 400
-
+        product = db.session.get(Product, product_id)
+        if not product:
+            return jsonify({"ok": False, "error": f"product_id {product_id} not found"}), 400
         if qty < 1:
             return jsonify({"ok": False, "error": "invalid_quantity"}), 400
-
         if unit_price <= 0:
-            unit_price = float(room.nightly_rate)
+            unit_price = float(product.unit_price)
 
         subtotal = qty * unit_price
         computed_total += subtotal
         validated_items.append({
-            "room_id": room_id,
+            "product_id": product_id,
             "qty": qty,
             "unit_price": unit_price,
             "subtotal": subtotal,
         })
 
-    # --- 日期解析 ---
     try:
-        ci = _parse_date(data.get("check_in")) or datetime.utcnow().date()
-        co = _parse_date(data.get("check_out")) or ci
+        od = _parse_date(data.get("order_date")) or datetime.utcnow().date()
+        dd = _parse_date(data.get("delivery_date")) or od
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
 
-    # --- 建立 Booking + OrderItem ---
     try:
-        first_room_id = validated_items[0]["room_id"]
-
-        new_booking = Booking(
-            room_id=first_room_id,
-            guest_name=guest_name,
-            guest_email=guest_email,
-            guest_phone=(data.get("guest_phone") or "").strip(),
-            check_in=ci,
-            check_out=co,
-            nights=int(data.get("nights", 1) or 1),
+        new_order = Order(
+            customer_name=customer_name,
+            customer_email=customer_email,
+            customer_phone=(data.get("customer_phone") or "").strip(),
+            order_date=od,
+            delivery_date=dd,
             total_amount=computed_total,
             note=(data.get("note") or "").strip(),
         )
-        db.session.add(new_booking)
-        db.session.flush()  # 取得 new_booking.id
+        db.session.add(new_order)
+        db.session.flush()
 
         for item in validated_items:
             db.session.add(OrderItem(
-                booking_id=new_booking.id,
-                room_id=item["room_id"],
+                order_id=new_order.id,
+                product_id=item["product_id"],
                 quantity=item["qty"],
                 unit_price=item["unit_price"],
                 subtotal=item["subtotal"],
@@ -266,41 +252,37 @@ def create_booking():
         return jsonify({
             "ok": True,
             "message": "訂單建立成功",
-            "booking": new_booking.to_dict(),
+            "order": new_order.to_dict(),
         }), 201
 
     except Exception as e:
         import traceback
-        app.logger.error("create_booking failed: %s", e)
+        app.logger.error("create_order failed: %s", e)
         app.logger.error(traceback.format_exc())
         db.session.rollback()
-        return jsonify({
-            "ok": False,
-            "error": "server_error",
-            "detail": str(e),
-        }), 500
+        return jsonify({"ok": False, "error": "server_error", "detail": str(e)}), 500
 
 
-@app.route("/api/bookings/<int:bid>", methods=["GET"])
-def get_booking(bid):
-    b = db.session.get(Booking, bid)
-    if not b:
+@app.route("/api/orders/<int:oid>", methods=["GET"])
+def get_order(oid):
+    o = db.session.get(Order, oid)
+    if not o:
         return jsonify({"ok": False, "error": "not_found"}), 404
-    return jsonify({"ok": True, "booking": b.to_dict()})
+    return jsonify({"ok": True, "order": o.to_dict()})
 
 
-@app.route("/api/bookings/<int:bid>/status", methods=["POST"])
-def update_booking_status(bid):
+@app.route("/api/orders/<int:oid>/status", methods=["POST"])
+def update_order_status(oid):
     data = request.get_json(silent=True) or {}
-    b = db.session.get(Booking, bid)
-    if not b:
+    o = db.session.get(Order, oid)
+    if not o:
         return jsonify({"ok": False, "error": "not_found"}), 404
-    if data.get("booking_status"):
-        b.booking_status = data["booking_status"]
+    if data.get("order_status"):
+        o.order_status = data["order_status"]
     if data.get("payment_status"):
-        b.payment_status = data["payment_status"]
+        o.payment_status = data["payment_status"]
     db.session.commit()
-    return jsonify({"ok": True, "booking": b.to_dict()})
+    return jsonify({"ok": True, "order": o.to_dict()})
 
 
 # -------------------------------------------------------------
@@ -314,25 +296,25 @@ def ecpay_config():
 @app.route("/api/ecpay/create-order", methods=["POST"])
 def ecpay_create_order():
     data = request.get_json(silent=True) or {}
-    booking_id = data.get("booking_id")
-    booking = db.session.get(Booking, booking_id) if booking_id else None
-    if not booking:
-        return jsonify({"ok": False, "error": "booking_not_found"}), 404
+    order_id = data.get("order_id")
+    order = db.session.get(Order, order_id) if order_id else None
+    if not order:
+        return jsonify({"ok": False, "error": "order_not_found"}), 404
     return jsonify({
         "ok": True,
-        "redirect_url": f"/api/ecpay/mock-pay/{booking_id}",
-        "trade_no": f"MOCK{booking_id}",
+        "redirect_url": f"/api/ecpay/mock-pay/{order_id}",
+        "trade_no": f"MOCK{order_id}",
     })
 
 
-@app.route("/api/ecpay/mock-pay/<int:booking_id>", methods=["GET"])
-def mock_pay(booking_id):
-    booking = db.session.get(Booking, booking_id)
-    if booking:
-        booking.payment_status = "paid"
+@app.route("/api/ecpay/mock-pay/<int:order_id>", methods=["GET"])
+def mock_pay(order_id):
+    order = db.session.get(Order, order_id)
+    if order:
+        order.payment_status = "paid"
         db.session.commit()
     return (
-        f"<h3>訂單 #{booking_id} 付款成功！請關閉此視窗返回系統。</h3>"
+        f"<h3>訂單 #{order_id} 付款成功！請關閉此視窗返回系統。</h3>"
         f"<script>setTimeout(()=>window.close(),1500)</script>"
     )
 
